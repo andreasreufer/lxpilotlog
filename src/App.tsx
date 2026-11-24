@@ -4,6 +4,8 @@ import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 import {
   CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   DownloadIcon,
   Loader2Icon,
   PlaneIcon,
@@ -59,8 +61,8 @@ export default function App() {
   const [tails, setTails] = useState<Record<string, TailState>>(() => loadCache())
   const [overrides, setOverrides] = useState<Record<string, string>>(() => loadOverrides())
   const [lookup, setLookup] = useState<{ done: number; total: number }>()
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const [anchor, setAnchor] = useState<string>()
+  const [windowStart, setWindowStart] = useState<number>()
+  const [windowSize, setWindowSize] = useState(7)
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -109,23 +111,10 @@ export default function App() {
   }, [flights, range])
 
   const totalBlock = visible.reduce((sum, f) => sum + blockMinutes(f), 0)
-  const selectedVisible = visible.filter((f) => selected.has(f.uid))
-  const selectedBlock = selectedVisible.reduce((sum, f) => sum + blockMinutes(f), 0)
-
-  /** Click toggles one flight; shift-click applies the same to all flights since the last click. */
-  function toggleSelected(uid: string, shift: boolean) {
-    const i = visible.findIndex((f) => f.uid === uid)
-    const a = shift && anchor ? visible.findIndex((f) => f.uid === anchor) : -1
-    const ids = a === -1 ? [uid] : visible.slice(Math.min(a, i), Math.max(a, i) + 1).map((f) => f.uid)
-    const on = !selected.has(uid)
-    const next = new Set(selected)
-    for (const id of ids) {
-      if (on) next.add(id)
-      else next.delete(id)
-    }
-    setSelected(next)
-    setAnchor(uid)
-  }
+  // Window of consecutive shown flights; kept inside the list when the date range shrinks.
+  const start = windowStart === undefined ? undefined : Math.max(0, Math.min(windowStart, visible.length - windowSize))
+  const inWindow = (i: number) => start !== undefined && i >= start && i < start + windowSize
+  const windowBlock = visible.filter((_, i) => inWindow(i)).reduce((sum, f) => sum + blockMinutes(f), 0)
 
   const tailFor = (f: Flight): string | undefined => {
     const key = tailKey(f)
@@ -318,19 +307,7 @@ export default function App() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-8 pl-4">
-                <Checkbox
-                  aria-label="Select all shown flights"
-                  checked={
-                    selectedVisible.length === 0
-                      ? false
-                      : selectedVisible.length === visible.length
-                        ? true
-                        : "indeterminate"
-                  }
-                  onCheckedChange={(checked) => setSelected(new Set(checked === true ? visible.map((f) => f.uid) : []))}
-                />
-              </TableHead>
+              <TableHead className="w-8 pl-4" />
               <TableHead>Flight</TableHead>
               <TableHead>Date (UTC)</TableHead>
               <TableHead>From</TableHead>
@@ -353,17 +330,17 @@ export default function App() {
                 </TableCell>
               </TableRow>
             ) : (
-              visible.map((f) => {
+              visible.map((f, i) => {
                 const key = tailKey(f)
                 return (
-                  <TableRow key={f.uid} data-state={selected.has(f.uid) ? "selected" : undefined}>
+                  <TableRow key={f.uid} data-state={inWindow(i) ? "selected" : undefined}>
                     <TableCell className="pl-4">
                       <Checkbox
-                        aria-label={`Select ${f.flightNumber}`}
-                        checked={selected.has(f.uid)}
+                        aria-label={`Start window at ${f.flightNumber}`}
+                        checked={inWindow(i)}
                         onClick={(e) => {
                           e.preventDefault()
-                          toggleSelected(f.uid, e.shiftKey)
+                          setWindowStart(i)
                         }}
                       />
                     </TableCell>
@@ -400,18 +377,63 @@ export default function App() {
           </TableBody>
           {visible.length > 0 && (
             <TableFooter>
-              {selectedVisible.length > 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="pl-4">
-                    {selectedVisible.length} selected{" "}
-                    <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setSelected(new Set())}>
-                      Clear
+              <TableRow>
+                <TableCell colSpan={7} className="pl-4">
+                  <div className="flex items-center gap-2">
+                    Window of
+                    <Input
+                      type="number"
+                      min={1}
+                      aria-label="Flights in window"
+                      value={windowSize}
+                      onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value) || 1))}
+                      className="h-7 w-16"
+                    />
+                    flights
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-7"
+                      aria-label="Move window to earlier flights"
+                      disabled={start === undefined || start === 0}
+                      onClick={() => setWindowStart((start ?? 0) - 1)}
+                    >
+                      <ChevronLeftIcon />
                     </Button>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(selectedBlock)}</TableCell>
-                  <TableCell colSpan={3} />
-                </TableRow>
-              )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-7"
+                      aria-label="Move window to later flights"
+                      disabled={start !== undefined && start + windowSize >= visible.length}
+                      onClick={() => setWindowStart(start === undefined ? 0 : start + 1)}
+                    >
+                      <ChevronRightIcon />
+                    </Button>
+                    {start === undefined ? (
+                      <span className="text-muted-foreground">Tick a flight to start the window there</span>
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground">
+                          flights {start + 1}–{Math.min(start + windowSize, visible.length)}
+                        </span>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0"
+                          onClick={() => setWindowStart(undefined)}
+                        >
+                          Clear
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {start !== undefined && formatDuration(windowBlock)}
+                </TableCell>
+                <TableCell colSpan={3} />
+              </TableRow>
               <TableRow>
                 <TableCell colSpan={7} className="pl-4">
                   {visible.length} flights
