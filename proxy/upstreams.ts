@@ -3,6 +3,5 @@
 // /<name>/<path> to <host>/<path>.
 export const upstreams: Record<string, string> = {
   'swiss-schedule': 'https://schedule.swiss.com',
-  opensky: 'https://opensky-network.org',
-  'opensky-auth': 'https://auth.opensky-network.org',
+  aeroapi: 'https://aeroapi.flightaware.com',
 }

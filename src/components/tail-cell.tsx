@@ -43,19 +43,11 @@ export function TailCell({
   let content: React.ReactNode
   let hint: string
   if (reg) {
-    const fuzzy = !override && state?.status === "found" && !state.exact
-    content = <span className={fuzzy ? "font-mono text-muted-foreground" : "font-mono"}>{reg}{fuzzy && "?"}</span>
+    content = <span className="font-mono">{reg}</span>
     hint = override
       ? "Entered manually · click to edit"
       : state?.status === "found"
-        ? [
-            state.model,
-            state.callsign && `seen as ${state.callsign}`,
-            !state.exact && "matched by route and time",
-            "click to edit",
-          ]
-            .filter(Boolean)
-            .join(" · ")
+        ? `${state.model ? `${state.model} · ` : ""}from FlightAware · click to edit`
         : "Click to edit"
   } else if (state?.status === "loading") {
     content = <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
@@ -67,10 +59,10 @@ export function TailCell({
     content = <span className="text-muted-foreground">—</span>
     hint =
       state?.status === "not-found"
-        ? "No matching flight in OpenSky data · click to enter"
+        ? "No aircraft known to FlightAware (yet) · click to enter"
         : available
           ? "Not looked up yet · click to enter"
-          : "Available from OpenSky the day after the flight · click to enter"
+          : "Lookup only covers the last 10 days · click to enter"
   }
 
   return (

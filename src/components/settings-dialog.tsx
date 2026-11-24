@@ -14,21 +14,20 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { Credentials } from "@/lib/tails"
 
 export function SettingsDialog({
-  creds,
+  apiKey,
   onSave,
   onClearCache,
 }: {
-  creds: Credentials
-  onSave: (creds: Credentials) => void
+  apiKey: string
+  onSave: (key: string) => void
   onClearCache: () => void
 }) {
-  const [draft, setDraft] = useState(creds)
+  const [draft, setDraft] = useState(apiKey)
 
   return (
-    <Dialog onOpenChange={(open) => open && setDraft(creds)}>
+    <Dialog onOpenChange={(open) => open && setDraft(apiKey)}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" aria-label="Settings">
           <SettingsIcon />
@@ -38,53 +37,36 @@ export function SettingsDialog({
         <DialogHeader>
           <DialogTitle>Tail sign lookup</DialogTitle>
           <DialogDescription>
-            Tail signs are matched from free{" "}
-            <a className="underline underline-offset-2" href="https://opensky-network.org" target="_blank" rel="noreferrer">
-              OpenSky Network
-            </a>{" "}
-            ADS-B data. Create a free account, then on your{" "}
+            Tail signs come from{" "}
             <a
               className="underline underline-offset-2"
-              href="https://opensky-network.org/my-opensky/account"
+              href="https://flightaware.com/aeroapi/portal"
               target="_blank"
               rel="noreferrer"
             >
-              account page
-            </a>{" "}
-            create an API client and paste its credentials here. They are stored only in this browser.
+              FlightAware AeroAPI
+            </a>
+            . The Personal tier includes $5 of free usage per month. Create an API key there and paste it here. It is
+            stored only in this browser.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="client-id">Client ID</Label>
-            <Input
-              id="client-id"
-              autoComplete="off"
-              value={draft.clientId}
-              onChange={(e) => setDraft({ ...draft, clientId: e.target.value })}
-              className="font-mono"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="client-secret">Client secret</Label>
-            <Input
-              id="client-secret"
-              type="password"
-              autoComplete="off"
-              value={draft.clientSecret}
-              onChange={(e) => setDraft({ ...draft, clientSecret: e.target.value })}
-              className="font-mono"
-            />
-          </div>
+        <div className="grid gap-2">
+          <Label htmlFor="api-key">AeroAPI key</Label>
+          <Input
+            id="api-key"
+            type="password"
+            autoComplete="off"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="font-mono"
+          />
         </div>
         <DialogFooter className="sm:justify-between">
           <Button variant="ghost" onClick={onClearCache}>
             Clear cached tail signs
           </Button>
           <DialogClose asChild>
-            <Button onClick={() => onSave({ clientId: draft.clientId.trim(), clientSecret: draft.clientSecret.trim() })}>
-              Save
-            </Button>
+            <Button onClick={() => onSave(draft.trim())}>Save</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

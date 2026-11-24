@@ -1,63 +1,42 @@
 import type { Flight } from "./flights"
-import { toIcao } from "./airports"
 import { PROXY } from "./proxy"
 
 /**
- * Aircraft registration lookup from free sources:
+ * Aircraft registration lookup via FlightAware AeroAPI
+ * (https://flightaware.com/aeroapi, Personal tier: $5 free usage per month).
+ * `/flights/{ident}` covers flights from 10 days ago to 2 days ahead; the
+ * registration appears once the airline has assigned an aircraft.
  *
- * 1. OpenSky Network (https://opensky-network.org) knows which transponder
- *    (ICAO 24-bit address) departed an airport at what time and under which
- *    callsign. Needs a free account + API client (OAuth2 client credentials).
- *    Flights are published by a nightly batch job, so only flights up to the
- *    previous UTC day can be looked up.
- * 2. hexdb.io maps the transponder address to the registration, no key needed.
- *
- * OpenSky sends no CORS headers for third-party origins, so its API and auth
- * server go through the proxy (see src/lib/proxy.ts).
+ * AeroAPI sends no CORS headers, so requests go through the proxy
+ * (see src/lib/proxy.ts).
  */
-const OPENSKY_API = `${PROXY}/opensky/api`
-const OPENSKY_TOKEN_URL = `${PROXY}/opensky-auth/auth/realms/opensky-network/protocol/openid-connect/token`
-const HEXDB_API = "https://hexdb.io/api/v1/aircraft"
+const AEROAPI = `${PROXY}/aeroapi/aeroapi`
+const DAY = 86_400_000
+// Personal tier allows 10 result sets per minute.
+const MIN_INTERVAL_MS = 6500
 
-const CACHE_KEY = "lxpilotlog.tails.v2"
+const CACHE_KEY = "lxpilotlog.tails.v3"
 const OVERRIDES_KEY = "lxpilotlog.tailOverrides.v1"
 
-/** IATA airline designator -> ICAO callsign prefix, for matching callsigns. */
-const AIRLINE_ICAO: Record<string, string> = {
-  LX: "SWR",
-  WK: "EDW",
-  "2L": "OAW",
-  LH: "DLH",
-  OS: "AUA",
-  SN: "BEL",
-  EN: "DLA",
-  BT: "BTI",
-}
-
-export type Credentials = { clientId: string; clientSecret: string }
-
 export type TailResult =
-  | { status: "found"; reg: string; model?: string; icao24: string; callsign?: string; exact: boolean }
-  | { status: "not-found" }
-  | { status: "error"; message: string }
+  { status: "found"; reg: string; model?: string } | { status: "not-found" } | { status: "error"; message: string }
 
-type OpenSkyFlight = {
-  icao24: string
-  firstSeen: number
-  lastSeen: number
-  estDepartureAirport: string | null
-  estArrivalAirport: string | null
-  callsign: string | null
+export type AeroApiFlight = {
+  registration: string | null
+  aircraft_type: string | null
+  origin: { code_iata: string | null } | null
+  scheduled_out: string | null
+  scheduled_off: string | null
 }
 
 export function tailKey(f: Flight): string {
   return `${f.flightNumber}|${f.departureLocalDate}|${f.from}`
 }
 
-/** OpenSky only has flights up to the end of the previous UTC day. */
-export function isLookupAvailable(f: Flight, now = new Date()): boolean {
-  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  return f.departureUtc.getTime() < todayUtc
+/** AeroAPI only serves flights from 10 days ago to 2 days ahead. */
+export function isLookupAvailable(f: Flight, now = Date.now()): boolean {
+  const t = f.departureUtc.getTime()
+  return t > now - 10 * DAY && t < now + 2 * DAY
 }
 
 export function loadCache(): Record<string, TailResult> {
@@ -73,8 +52,10 @@ export function saveOverrides(overrides: Record<string, string>) {
 }
 
 export function storeResult(f: Flight, result: TailResult) {
-  // Errors are transient - only cache final answers.
+  // Errors are transient, and an upcoming flight may still get an aircraft
+  // assigned - only cache final answers.
   if (result.status === "error") return
+  if (result.status === "not-found" && f.departureUtc.getTime() > Date.now()) return
   const cache = loadCache()
   cache[tailKey(f)] = result
   writeJson(CACHE_KEY, cache)
@@ -88,153 +69,65 @@ export function clearCache() {
   }
 }
 
+/** Problems that affect every lookup (bad key, quota), so the run should stop. */
 export class LookupError extends Error {}
 
-/** Looks up tail signs; keeps the OpenSky token and per-airport-day results in memory. */
 export class TailLookup {
-  private token?: { value: string; expiresAt: number }
-  private departures = new Map<string, Promise<OpenSkyFlight[]>>()
-  private registrations = new Map<string, Promise<{ reg?: string; model?: string }>>()
-  private readonly creds: Credentials
+  private lastRequest = 0
+  private readonly apiKey: string
   private readonly signal?: AbortSignal
 
-  constructor(creds: Credentials, signal?: AbortSignal) {
-    this.creds = creds
+  constructor(apiKey: string, signal?: AbortSignal) {
+    this.apiKey = apiKey
     this.signal = signal
   }
 
   async lookup(f: Flight): Promise<TailResult> {
-    const from = toIcao(f.from)
-    const to = toIcao(f.to)
-    if (!from) return { status: "error", message: `Unknown airport ${f.from}` }
-
-    const sched = f.departureUtc.getTime() / 1000
-    // Accept detection from 30 min before to 4 h after scheduled departure.
-    const earliest = sched - 30 * 60
-    const latest = sched + 4 * 3600
-
-    const days = new Set([utcDay(earliest), utcDay(latest)])
-    const candidates = (await Promise.all([...days].map((d) => this.departuresOn(from, d)))).flat()
-    const match = pickFlight(f, candidates, earliest, latest, to)
-    if (!match) return { status: "not-found" }
-
-    const { reg, model } = await this.registration(match.flight.icao24)
-    if (!reg) return { status: "not-found" }
-    return {
-      status: "found",
-      reg,
-      model,
-      icao24: match.flight.icao24,
-      callsign: match.flight.callsign?.trim() || undefined,
-      exact: match.exact,
-    }
-  }
-
-  private departuresOn(airport: string, dayStart: number): Promise<OpenSkyFlight[]> {
-    const key = `${airport}|${dayStart}`
-    let p = this.departures.get(key)
-    if (!p) {
-      const url = `${OPENSKY_API}/flights/departure?airport=${airport}&begin=${dayStart}&end=${dayStart + 86_399}`
-      p = this.openSky(url)
-      p.catch(() => this.departures.delete(key))
-      this.departures.set(key, p)
-    }
-    return p
-  }
-
-  private async openSky(url: string, retried = false): Promise<OpenSkyFlight[]> {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${await this.getToken()}` },
-      signal: this.signal,
+    const now = Date.now()
+    const sched = f.departureUtc.getTime()
+    // Stay inside the window AeroAPI accepts, or it rejects the request.
+    const start = new Date(Math.max(sched - 6 * 3600_000, now - 10 * DAY + 60_000))
+    const end = new Date(Math.min(sched + 6 * 3600_000, now + 2 * DAY - 60_000))
+    const params = new URLSearchParams({
+      ident_type: "designator",
+      start: start.toISOString().slice(0, 19) + "Z",
+      end: end.toISOString().slice(0, 19) + "Z",
     })
-    if (res.status === 404) return []
-    if (res.status === 401 && !retried) {
-      this.token = undefined
-      return this.openSky(url, true)
-    }
-    if (res.status === 429) {
-      const wait = res.headers.get("X-Rate-Limit-Retry-After-Seconds")
-      throw new LookupError(
-        `OpenSky daily credits used up${wait ? `, retry in ${Math.ceil(Number(wait) / 3600)} h` : ""}`,
-      )
-    }
-    if (!res.ok) throw new LookupError(`OpenSky HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`)
-    return (await res.json()) as OpenSkyFlight[]
+    const data = await this.get(`${AEROAPI}/flights/${encodeURIComponent(f.flightNumber)}?${params}`)
+    const leg = pickFlight(f, data.flights ?? [])
+    return leg?.registration
+      ? { status: "found", reg: leg.registration, model: leg.aircraft_type ?? undefined }
+      : { status: "not-found" }
   }
 
-  private async getToken(): Promise<string> {
-    if (this.token && Date.now() < this.token.expiresAt) return this.token.value
-    const res = await fetch(OPENSKY_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: this.creds.clientId,
-        client_secret: this.creds.clientSecret,
-      }),
-      signal: this.signal,
-    })
-    if (!res.ok) throw new LookupError(`OpenSky login failed (HTTP ${res.status}) - check client ID and secret`)
-    const data = (await res.json()) as { access_token: string; expires_in: number }
-    this.token = { value: data.access_token, expiresAt: Date.now() + (data.expires_in - 60) * 1000 }
-    return this.token.value
-  }
+  private async get(url: string, attempt = 0): Promise<{ flights?: AeroApiFlight[] }> {
+    await sleep(this.lastRequest + MIN_INTERVAL_MS - Date.now(), this.signal)
+    this.lastRequest = Date.now()
+    const res = await fetch(url, { headers: { "x-apikey": this.apiKey }, signal: this.signal })
 
-  private registration(icao24: string) {
-    let p = this.registrations.get(icao24)
-    if (!p) {
-      p = fetch(`${HEXDB_API}/${icao24}`, { signal: this.signal }).then(async (res) => {
-        if (res.status === 404) return {}
-        if (!res.ok) throw new LookupError(`hexdb.io HTTP ${res.status}`)
-        const data = (await res.json()) as { Registration?: string; Type?: string }
-        return { reg: data.Registration || undefined, model: data.Type || undefined }
-      })
-      p.catch(() => this.registrations.delete(icao24))
-      this.registrations.set(icao24, p)
+    if (res.status === 429 && attempt < 2) {
+      await sleep(60_000, this.signal)
+      return this.get(url, attempt + 1)
     }
-    return p
+    if (res.status === 401 || res.status === 403) throw new LookupError("FlightAware rejected the AeroAPI key")
+    if (res.status === 429) throw new LookupError("FlightAware rate limit reached, try again later")
+    if (!res.ok) throw new Error(`AeroAPI HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`)
+    return res.json()
   }
 }
 
-/**
- * Picks the OpenSky flight that most likely is the rostered one:
- * 1. callsign equals the ICAO flight number (LX798 -> SWR798),
- * 2. callsign has the airline's prefix (alphanumeric callsigns like SWR4KL)
- *    and the arrival airport matches,
- * then the one detected closest to the scheduled departure.
- */
-export function pickFlight(
-  f: Flight,
-  candidates: OpenSkyFlight[],
-  earliest: number,
-  latest: number,
-  toIcao: string | undefined,
-): { flight: OpenSkyFlight; exact: boolean } | undefined {
-  const [, airline, number] = /^([A-Z0-9]{2})(\d+[A-Z]?)$/.exec(f.flightNumber) ?? []
-  const prefix = airline ? AIRLINE_ICAO[airline] : undefined
-  const exactCallsign = prefix ? `${prefix}${number}` : undefined
-  const sched = f.departureUtc.getTime() / 1000
-
-  const inWindow = candidates.filter((c) => c.firstSeen >= earliest && c.firstSeen <= latest)
-  const byTime = (a: OpenSkyFlight, b: OpenSkyFlight) =>
-    Math.abs(a.firstSeen - sched) - Math.abs(b.firstSeen - sched)
-
-  const exact = inWindow.filter((c) => c.callsign?.trim() === exactCallsign).sort(byTime)
-  if (exact.length) return { flight: exact[0], exact: true }
-
-  if (!prefix || !toIcao) return undefined
-  const sameAirline = inWindow
-    .filter((c) => c.callsign?.trim().startsWith(prefix) && c.estArrivalAirport === toIcao)
-    .sort(byTime)
-  return sameAirline.length ? { flight: sameAirline[0], exact: false } : undefined
-}
-
-function utcDay(unixSeconds: number): number {
-  return unixSeconds - (unixSeconds % 86_400)
+/** The leg departing from the rostered airport, scheduled closest to the roster time. */
+export function pickFlight(f: Flight, flights: AeroApiFlight[]): AeroApiFlight | undefined {
+  const sched = f.departureUtc.getTime()
+  const offset = (l: AeroApiFlight) => Math.abs(Date.parse(l.scheduled_out ?? l.scheduled_off ?? "") - sched)
+  return flights
+    .filter((l) => l.origin?.code_iata === f.from && !Number.isNaN(offset(l)))
+    .sort((a, b) => offset(a) - offset(b))[0]
 }
 
 export function sleep(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
+    if (ms <= 0) return resolve()
     const t = setTimeout(resolve, ms)
     signal?.addEventListener("abort", () => {
       clearTimeout(t)

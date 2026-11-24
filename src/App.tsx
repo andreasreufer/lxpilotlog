@@ -34,7 +34,6 @@ import {
   storeResult,
   TailLookup,
   tailKey,
-  type Credentials,
 } from "@/lib/tails"
 import { toIcao } from "@/lib/airports"
 import { PROXY } from "@/lib/proxy"
@@ -51,10 +50,7 @@ function toFetchUrl(feedUrl: string): string {
 
 export default function App() {
   const [feedUrl, setFeedUrl] = useState(() => readSetting("feedUrl") ?? "")
-  const [creds, setCreds] = useState<Credentials>(() => ({
-    clientId: readSetting("openskyClientId") ?? "",
-    clientSecret: readSetting("openskyClientSecret") ?? "",
-  }))
+  const [apiKey, setApiKey] = useState(() => readSetting("aeroapiKey") ?? "")
   const [flights, setFlights] = useState<Flight[]>([])
   const [loading, setLoading] = useState(false)
   const [loadedAt, setLoadedAt] = useState<Date>()
@@ -119,26 +115,27 @@ export default function App() {
   }
 
   async function runLookup() {
-    if (!creds.clientId || !creds.clientSecret) {
-      toast.error("Add your OpenSky API client in settings first")
+    if (!apiKey) {
+      toast.error("Add your FlightAware AeroAPI key in settings first")
       return
     }
     const pending = visible.filter((f) => {
       const key = tailKey(f)
       const t = tails[key]
-      return !overrides[key] && isLookupAvailable(f) && (!t || t.status === "error")
+      const retry = !t || t.status === "error" || (t.status === "not-found" && f.departureUtc.getTime() > Date.now())
+      return !overrides[key] && isLookupAvailable(f) && retry
     })
     if (pending.length === 0) {
       toast.info("Nothing to look up", {
         description:
-          "Tail signs in this range are known, or the flights are too recent (OpenSky publishes them the next day).",
+          "Tail signs in this range are known, or the flights are outside FlightAware's window (last 10 days to 2 days ahead).",
       })
       return
     }
 
     const controller = new AbortController()
     abortRef.current = controller
-    const lookup = new TailLookup(creds, controller.signal)
+    const lookup = new TailLookup(apiKey, controller.signal)
     setLookup({ done: 0, total: pending.length })
     let errors = 0
 
@@ -213,11 +210,10 @@ export default function App() {
           </div>
         </div>
         <SettingsDialog
-          creds={creds}
-          onSave={(next) => {
-            setCreds(next)
-            writeSetting("openskyClientId", next.clientId)
-            writeSetting("openskyClientSecret", next.clientSecret)
+          apiKey={apiKey}
+          onSave={(key) => {
+            setApiKey(key)
+            writeSetting("aeroapiKey", key)
           }}
           onClearCache={() => {
             clearCache()
@@ -374,9 +370,9 @@ export default function App() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Times are scheduled times from the roster. Deadhead flights are not listed. Tail signs are matched from OpenSky
-        Network ADS-B data and hexdb.io; flights become available the day after they operated. Click a tail sign to
-        correct it manually.
+        Times are scheduled times from the roster. Deadhead flights are not listed. Tail signs come from FlightAware
+        AeroAPI and can be looked up for flights from the last 10 days up to 2 days ahead. Click a tail sign to correct
+        it manually.
       </p>
     </div>
   )

@@ -18,7 +18,8 @@ npm test
 
 ## GitHub Pages
 
-The feed host and OpenSky block requests from web pages (no CORS headers).
+The feed host and FlightAware AeroAPI block requests from web pages (no CORS
+headers).
 Locally the Vite server relays them; on GitHub Pages a small Cloudflare Worker
 ([proxy/worker.ts](proxy/worker.ts)) does the same, limited to the hosts in
 [proxy/upstreams.ts](proxy/upstreams.ts).
@@ -40,20 +41,12 @@ Locally the Vite server relays them; on GitHub Pages a small Cloudflare Worker
   `LX1480 ZRH 0827 PRG 0951 221 [CM]` are treated as flights; everything else
   (days off, simulator, …) and deadhead legs (`[DH]`) are ignored. UTC times
   come from `DTSTART`/`DTEND`.
-- **Tail signs** – free sources only:
-  1. [OpenSky Network](https://opensky-network.org) `/flights/departure`
-     lists the transponders that left the departure airport that day with
-     their callsigns. The rostered flight is matched by callsign (`LX798` →
-     `SWR798`), or by airline prefix + destination for alphanumeric
-     callsigns, closest to the scheduled time. Needs a free account and an
-     API client (client ID/secret, entered in the settings dialog). The free
-     tier has 4,000 credits/day, and one airport-day query costs 30. Flights
-     are published the day after they operated.
-  2. [hexdb.io](https://hexdb.io) maps the transponder address to the
-     registration (no key).
-
-  Results are cached in `localStorage`. Click a tail cell to enter or correct
-  it by hand.
+- **Tail signs** – from [FlightAware AeroAPI](https://flightaware.com/aeroapi)
+  (`/flights/{ident}`, Personal tier with $5 free usage per month; key in
+  the settings dialog). Works for flights from the last 10 days up to 2 days
+  ahead, once an aircraft is assigned. Requests are spaced to the Personal
+  tier's 10 per minute. Results are cached in `localStorage`; click a tail
+  cell to enter or correct it by hand.
 - **Airports** – `src/lib/airports.json` (IATA → ICAO) is generated from
   [OurAirports](https://ourairports.com/data/) with
   `node scripts/build-airports.mjs`.
