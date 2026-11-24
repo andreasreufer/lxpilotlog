@@ -1,0 +1,485 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { endOfMonth, format, startOfMonth, subMonths } from "date-fns"
+import type { DateRange } from "react-day-picker"
+import { toast } from "sonner"
+import {
+  CalendarIcon,
+  DownloadIcon,
+  Loader2Icon,
+  PlaneIcon,
+  RefreshCwIcon,
+  SearchIcon,
+  SquareIcon,
+  UploadIcon,
+} from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { SettingsDialog } from "@/components/settings-dialog"
+import { TailCell, type TailState } from "@/components/tail-cell"
+import { blockMinutes, formatDuration, formatUtcDate, formatUtcTime, parseFlights, type Flight } from "@/lib/flights"
+import {
+  clearCache,
+  loadCache,
+  loadOverrides,
+  isLookupAvailable,
+  LookupError,
+  saveOverrides,
+  storeResult,
+  TailLookup,
+  tailKey,
+  type Credentials,
+} from "@/lib/tails"
+import { toIcao } from "@/lib/airports"
+import { readSetting, writeSetting } from "@/lib/storage"
+
+/**
+ * GitHub Pages build (`vite build --mode pages`): there is no proxy, and the
+ * feed host and OpenSky block browser requests (no CORS), so the feed is opened
+ * as a downloaded .ics file and tail signs are entered by hand.
+ */
+const STATIC = import.meta.env.MODE === "pages"
+
+/** schedule.swiss.com has no CORS headers, so go through the Vite proxy. */
+function toFetchUrl(feedUrl: string): string {
+  const url = new URL(feedUrl.trim().replace(/^webcals?:\/\//, "https://"))
+  if (url.hostname === "schedule.swiss.com") {
+    return `/proxy/swiss-schedule${url.pathname}${url.search}`
+  }
+  return url.toString()
+}
+
+export default function App() {
+  const [feedUrl, setFeedUrl] = useState(() => readSetting("feedUrl") ?? "")
+  const [creds, setCreds] = useState<Credentials>(() => ({
+    clientId: readSetting("openskyClientId") ?? "",
+    clientSecret: readSetting("openskyClientSecret") ?? "",
+  }))
+  const [flights, setFlights] = useState<Flight[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadedAt, setLoadedAt] = useState<Date>()
+  const [range, setRange] = useState<DateRange>()
+  const [tails, setTails] = useState<Record<string, TailState>>(() => loadCache())
+  const [overrides, setOverrides] = useState<Record<string, string>>(() => loadOverrides())
+  const [lookup, setLookup] = useState<{ done: number; total: number }>()
+  const abortRef = useRef<AbortController | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const ingest = useCallback((text: string) => {
+    const all = parseFlights(text)
+    // Deadhead (positioning) legs are not flown, so they don't belong in the log.
+    const parsed = all.filter((f) => f.role !== "DH")
+    setFlights(parsed)
+    setLoadedAt(new Date())
+    setRange((current) => current ?? defaultRange(parsed))
+    const skipped = all.length - parsed.length
+    toast.success(`Loaded ${parsed.length} flights`, {
+      description: skipped ? `${skipped} deadhead flights ignored` : undefined,
+    })
+  }, [])
+
+  const loadFeed = useCallback(
+    async (url: string) => {
+      if (!url.trim()) return
+      setLoading(true)
+      try {
+        const res = await fetch(toFetchUrl(url))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        ingest(await res.text())
+        writeSetting("feedUrl", url.trim())
+      } catch (err) {
+        toast.error("Could not load calendar feed", { description: String(err) })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [ingest],
+  )
+
+  useEffect(() => {
+    if (feedUrl && !STATIC) void loadFeed(feedUrl)
+    // Only auto-load the remembered feed once on startup.
+  }, [])
+
+  const visible = useMemo(() => {
+    const from = range?.from ? format(range.from, "yyyy-MM-dd") : undefined
+    const to = range?.to ? format(range.to, "yyyy-MM-dd") : from
+    return flights.filter((f) => {
+      const d = formatUtcDate(f.departureUtc)
+      return (!from || d >= from) && (!to || d <= to)
+    })
+  }, [flights, range])
+
+  const totalBlock = visible.reduce((sum, f) => sum + blockMinutes(f), 0)
+
+  const tailFor = (f: Flight): string | undefined => {
+    const key = tailKey(f)
+    if (overrides[key]) return overrides[key]
+    const t = tails[key]
+    return t?.status === "found" ? t.reg : undefined
+  }
+
+  async function runLookup() {
+    if (!creds.clientId || !creds.clientSecret) {
+      toast.error("Add your OpenSky API client in settings first")
+      return
+    }
+    const pending = visible.filter((f) => {
+      const key = tailKey(f)
+      const t = tails[key]
+      return !overrides[key] && isLookupAvailable(f) && (!t || t.status === "error")
+    })
+    if (pending.length === 0) {
+      toast.info("Nothing to look up", {
+        description:
+          "Tail signs in this range are known, or the flights are too recent (OpenSky publishes them the next day).",
+      })
+      return
+    }
+
+    const controller = new AbortController()
+    abortRef.current = controller
+    const lookup = new TailLookup(creds, controller.signal)
+    setLookup({ done: 0, total: pending.length })
+    let errors = 0
+
+    try {
+      for (const [i, f] of pending.entries()) {
+        const key = tailKey(f)
+        setTails((t) => ({ ...t, [key]: { status: "loading" } }))
+        const result = await lookup.lookup(f).catch((err: unknown) => {
+          // Login or quota problems affect every flight - stop right away.
+          if (controller.signal.aborted || err instanceof LookupError) throw err
+          return { status: "error" as const, message: String(err) }
+        })
+        if (result.status === "error") errors++
+        storeResult(f, result)
+        setTails((t) => ({ ...t, [key]: result }))
+        setLookup({ done: i + 1, total: pending.length })
+      }
+    } catch (err) {
+      if (err instanceof LookupError) toast.error(err.message)
+    } finally {
+      // Drop any "loading" markers left by an abort.
+      setTails((t) => Object.fromEntries(Object.entries(t).filter(([, v]) => v.status !== "loading")))
+      setLookup(undefined)
+      abortRef.current = null
+      if (errors) toast.error(`${errors} lookup(s) failed`, { description: "Hover a ⚠ cell for details." })
+    }
+  }
+
+  function setOverride(f: Flight, reg: string) {
+    const next = { ...overrides }
+    const value = reg.trim().toUpperCase()
+    if (value) next[tailKey(f)] = value
+    else delete next[tailKey(f)]
+    setOverrides(next)
+    saveOverrides(next)
+  }
+
+  function exportCsv() {
+    const header = ["Date (UTC)", "Flight", "From", "To", "Dep (UTC)", "Arr (UTC)", "Block", "Type", "Role", "Tail"]
+    const rows = visible.map((f) => [
+      formatUtcDate(f.departureUtc),
+      f.flightNumber,
+      toIcao(f.from) ?? f.from,
+      toIcao(f.to) ?? f.to,
+      formatUtcTime(f.departureUtc),
+      formatUtcTime(f.arrivalUtc),
+      formatDuration(blockMinutes(f)),
+      f.aircraftType ?? "",
+      f.role ?? "",
+      tailFor(f) ?? "",
+    ])
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(",")).join("\n")
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+    const from = range?.from ? format(range.from, "yyyy-MM-dd") : "all"
+    const to = range?.to ? format(range.to, "yyyy-MM-dd") : from
+    a.download = `flights_${from}_${to}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <div className="mx-auto flex min-h-svh max-w-6xl flex-col gap-6 p-4 sm:p-8">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <PlaneIcon className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">LXpilotLog</h1>
+            <p className="text-sm text-muted-foreground">Flights from your crew schedule feed, times in UTC</p>
+          </div>
+        </div>
+        {!STATIC && (
+          <SettingsDialog
+            creds={creds}
+            onSave={(next) => {
+              setCreds(next)
+              writeSetting("openskyClientId", next.clientId)
+              writeSetting("openskyClientSecret", next.clientSecret)
+            }}
+            onClearCache={() => {
+              clearCache()
+              setTails({})
+              toast.success("Tail sign cache cleared")
+            }}
+          />
+        )}
+      </header>
+
+      <Card>
+        <CardContent>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ics,text/calendar"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (file) ingest(await file.text())
+              e.target.value = ""
+            }}
+          />
+          {STATIC ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Button onClick={() => fileInputRef.current?.click()}>
+                <UploadIcon />
+                Open .ics file
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                Open your schedule feed URL in the browser to download the .ics file, then open it here. The file is
+                read locally and never uploaded.
+              </p>
+            </div>
+          ) : (
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void loadFeed(feedUrl)
+              }}
+            >
+              <Input
+                type="url"
+                placeholder="https://schedule.swiss.com/…/….ics"
+                value={feedUrl}
+                onChange={(e) => setFeedUrl(e.target.value)}
+                className="flex-1 font-mono text-xs"
+              />
+              <div className="flex gap-2">
+                <Button type="submit" disabled={loading || !feedUrl.trim()}>
+                  {loading ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
+                  Load feed
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
+                      <UploadIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open an .ics file instead</TooltipContent>
+                </Tooltip>
+              </div>
+            </form>
+          )}
+          {loadedAt && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {flights.length} flights in feed (excluding deadheads) · loaded {format(loadedAt, "HH:mm:ss")}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <DateRangePicker range={range} onChange={setRange} flights={flights} />
+        <div className="ml-auto flex gap-2">
+          {STATIC ? null : lookup ? (
+            <Button variant="outline" onClick={() => abortRef.current?.abort()}>
+              <SquareIcon />
+              Stop ({lookup.done}/{lookup.total})
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={runLookup} disabled={visible.length === 0}>
+              <SearchIcon />
+              Look up tail signs
+            </Button>
+          )}
+          <Button variant="outline" onClick={exportCsv} disabled={visible.length === 0}>
+            <DownloadIcon />
+            CSV
+          </Button>
+        </div>
+      </div>
+
+      <Card className="py-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-4">Date (UTC)</TableHead>
+              <TableHead>Flight</TableHead>
+              <TableHead>From</TableHead>
+              <TableHead>To</TableHead>
+              <TableHead>Dep (UTC)</TableHead>
+              <TableHead>Arr (UTC)</TableHead>
+              <TableHead className="text-right">Block</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Tail</TableHead>
+              <TableHead className="pr-4">Role</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                  {flights.length === 0
+                    ? "Load a calendar feed to see your flights."
+                    : "No flights in this date range."}
+                </TableCell>
+              </TableRow>
+            ) : (
+              visible.map((f) => {
+                const key = tailKey(f)
+                return (
+                  <TableRow key={f.uid}>
+                    <TableCell className="pl-4 tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
+                    <TableCell className="font-medium">{f.flightNumber}</TableCell>
+                    <TableCell>
+                      <Airport iata={f.from} />
+                    </TableCell>
+                    <TableCell>
+                      <Airport iata={f.to} />
+                    </TableCell>
+                    <TableCell className="tabular-nums">{formatUtcTime(f.departureUtc)}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {formatUtcTime(f.arrivalUtc)}
+                      {formatUtcDate(f.arrivalUtc) !== formatUtcDate(f.departureUtc) && (
+                        <sup className="ml-0.5 text-muted-foreground">+1</sup>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatDuration(blockMinutes(f))}</TableCell>
+                    <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
+                    <TableCell>
+                      <TailCell
+                        state={tails[key]}
+                        override={overrides[key]}
+                        available={isLookupAvailable(f)}
+                        onOverride={(reg) => setOverride(f, reg)}
+                      />
+                    </TableCell>
+                    <TableCell className="pr-4">{f.role && <Badge variant="outline">{f.role}</Badge>}</TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+          {visible.length > 0 && (
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={6} className="pl-4">
+                  {visible.length} flights
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
+                <TableCell colSpan={3} />
+              </TableRow>
+            </TableFooter>
+          )}
+        </Table>
+      </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Times are scheduled times from the roster. Deadhead flights are not listed.{" "}
+        {STATIC
+          ? "Click a tail cell to enter the registration; it is saved in this browser."
+          : "Tail signs are matched from OpenSky Network ADS-B data and hexdb.io; flights become available the day after they operated. Click a tail sign to correct it manually."}
+      </p>
+    </div>
+  )
+}
+
+/** The current month if it has flights, otherwise the whole feed. */
+function defaultRange(flights: Flight[]): DateRange | undefined {
+  if (flights.length === 0) return undefined
+  const month = format(new Date(), "yyyy-MM")
+  if (flights.some((f) => formatUtcDate(f.departureUtc).startsWith(month))) {
+    return { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }
+  }
+  return { from: utcDateAsLocal(flights[0].departureUtc), to: utcDateAsLocal(flights.at(-1)!.departureUtc) }
+}
+
+/** ICAO code, with the roster's IATA code on hover. */
+function Airport({ iata }: { iata: string }) {
+  const icao = toIcao(iata)
+  if (!icao) return <span title="No ICAO code known">{iata}</span>
+  return <span title={iata}>{icao}</span>
+}
+
+function DateRangePicker({
+  range,
+  onChange,
+  flights,
+}: {
+  range: DateRange | undefined
+  onChange: (r: DateRange | undefined) => void
+  flights: Flight[]
+}) {
+  const now = new Date()
+  const last = subMonths(now, 1)
+  const presets: { label: string; range: DateRange | undefined }[] = [
+    { label: "This month", range: { from: startOfMonth(now), to: endOfMonth(now) } },
+    { label: "Last month", range: { from: startOfMonth(last), to: endOfMonth(last) } },
+    {
+      label: "All",
+      range: flights.length
+        ? { from: utcDateAsLocal(flights[0].departureUtc), to: utcDateAsLocal(flights.at(-1)!.departureUtc) }
+        : undefined,
+    },
+  ]
+
+  const label = range?.from
+    ? range.to && range.to.getTime() !== range.from.getTime()
+      ? `${format(range.from, "d MMM yyyy")} – ${format(range.to, "d MMM yyyy")}`
+      : format(range.from, "d MMM yyyy")
+    : "All dates"
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="min-w-60 justify-start font-normal">
+            <CalendarIcon />
+            {label}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="range"
+            numberOfMonths={2}
+            defaultMonth={range?.from}
+            selected={range}
+            onSelect={onChange}
+            weekStartsOn={1}
+          />
+        </PopoverContent>
+      </Popover>
+      {presets.map((p) => (
+        <Button key={p.label} variant="ghost" size="sm" onClick={() => onChange(p.range)}>
+          {p.label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+/** Calendar works on local dates; map a UTC calendar day onto the same local day. */
+function utcDateAsLocal(d: Date) {
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
