@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -58,6 +59,8 @@ export default function App() {
   const [tails, setTails] = useState<Record<string, TailState>>(() => loadCache())
   const [overrides, setOverrides] = useState<Record<string, string>>(() => loadOverrides())
   const [lookup, setLookup] = useState<{ done: number; total: number }>()
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [anchor, setAnchor] = useState<string>()
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -106,6 +109,23 @@ export default function App() {
   }, [flights, range])
 
   const totalBlock = visible.reduce((sum, f) => sum + blockMinutes(f), 0)
+  const selectedVisible = visible.filter((f) => selected.has(f.uid))
+  const selectedBlock = selectedVisible.reduce((sum, f) => sum + blockMinutes(f), 0)
+
+  /** Click toggles one flight; shift-click applies the same to all flights since the last click. */
+  function toggleSelected(uid: string, shift: boolean) {
+    const i = visible.findIndex((f) => f.uid === uid)
+    const a = shift && anchor ? visible.findIndex((f) => f.uid === anchor) : -1
+    const ids = a === -1 ? [uid] : visible.slice(Math.min(a, i), Math.max(a, i) + 1).map((f) => f.uid)
+    const on = !selected.has(uid)
+    const next = new Set(selected)
+    for (const id of ids) {
+      if (on) next.add(id)
+      else next.delete(id)
+    }
+    setSelected(next)
+    setAnchor(uid)
+  }
 
   const tailFor = (f: Flight): string | undefined => {
     const key = tailKey(f)
@@ -298,7 +318,20 @@ export default function App() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-4">Flight</TableHead>
+              <TableHead className="w-8 pl-4">
+                <Checkbox
+                  aria-label="Select all shown flights"
+                  checked={
+                    selectedVisible.length === 0
+                      ? false
+                      : selectedVisible.length === visible.length
+                        ? true
+                        : "indeterminate"
+                  }
+                  onCheckedChange={(checked) => setSelected(new Set(checked === true ? visible.map((f) => f.uid) : []))}
+                />
+              </TableHead>
+              <TableHead>Flight</TableHead>
               <TableHead>Date (UTC)</TableHead>
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
@@ -313,7 +346,7 @@ export default function App() {
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                   {flights.length === 0
                     ? "Load a calendar feed to see your flights."
                     : "No flights in this date range."}
@@ -323,8 +356,18 @@ export default function App() {
               visible.map((f) => {
                 const key = tailKey(f)
                 return (
-                  <TableRow key={f.uid}>
-                    <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
+                  <TableRow key={f.uid} data-state={selected.has(f.uid) ? "selected" : undefined}>
+                    <TableCell className="pl-4">
+                      <Checkbox
+                        aria-label={`Select ${f.flightNumber}`}
+                        checked={selected.has(f.uid)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          toggleSelected(f.uid, e.shiftKey)
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{f.flightNumber}</TableCell>
                     <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
                     <TableCell>
                       <Airport iata={f.from} />
@@ -357,8 +400,20 @@ export default function App() {
           </TableBody>
           {visible.length > 0 && (
             <TableFooter>
+              {selectedVisible.length > 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="pl-4">
+                    {selectedVisible.length} selected{" "}
+                    <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setSelected(new Set())}>
+                      Clear
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatDuration(selectedBlock)}</TableCell>
+                  <TableCell colSpan={3} />
+                </TableRow>
+              )}
               <TableRow>
-                <TableCell colSpan={6} className="pl-4">
+                <TableCell colSpan={7} className="pl-4">
                   {visible.length} flights
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
