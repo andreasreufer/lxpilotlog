@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { endOfMonth, format, startOfMonth, subMonths } from "date-fns"
+import { endOfMonth, format, startOfMonth, subDays, subMonths } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 import {
@@ -58,7 +58,7 @@ export default function App() {
   const [flights, setFlights] = useState<Flight[]>([])
   const [loading, setLoading] = useState(false)
   const [loadedAt, setLoadedAt] = useState<Date>()
-  const [range, setRange] = useState<DateRange>()
+  const [range, setRange] = useState<DateRange | undefined>(lastSevenDays)
   const [tails, setTails] = useState<Record<string, TailState>>(() => loadCache())
   const [overrides, setOverrides] = useState<Record<string, string>>(() => loadOverrides())
   const [lookup, setLookup] = useState<{ done: number; total: number }>()
@@ -71,7 +71,6 @@ export default function App() {
     const parsed = all.filter((f) => f.role !== "DH")
     setFlights(parsed)
     setLoadedAt(new Date())
-    setRange((current) => current ?? defaultRange(parsed))
     const skipped = all.length - parsed.length
     toast.success(`Loaded ${parsed.length} flights`, {
       description: skipped ? `${skipped} deadhead flights ignored` : undefined,
@@ -383,14 +382,10 @@ export default function App() {
   )
 }
 
-/** The current month if it has flights, otherwise the whole feed. */
-function defaultRange(flights: Flight[]): DateRange | undefined {
-  if (flights.length === 0) return undefined
-  const month = format(new Date(), "yyyy-MM")
-  if (flights.some((f) => formatUtcDate(f.departureUtc).startsWith(month))) {
-    return { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }
-  }
-  return { from: utcDateAsLocal(flights[0].departureUtc), to: utcDateAsLocal(flights.at(-1)!.departureUtc) }
+/** Today and the six days before it. */
+function lastSevenDays(): DateRange {
+  const today = new Date()
+  return { from: subDays(today, 6), to: today }
 }
 
 /** ICAO code, with the roster's IATA code on hover. */
@@ -412,6 +407,7 @@ function DateRangePicker({
   const now = new Date()
   const last = subMonths(now, 1)
   const presets: { label: string; range: DateRange | undefined }[] = [
+    { label: "Last 7 days", range: lastSevenDays() },
     { label: "This month", range: { from: startOfMonth(now), to: endOfMonth(now) } },
     { label: "Last month", range: { from: startOfMonth(last), to: endOfMonth(last) } },
     {
