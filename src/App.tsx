@@ -37,20 +37,14 @@ import {
   type Credentials,
 } from "@/lib/tails"
 import { toIcao } from "@/lib/airports"
+import { PROXY } from "@/lib/proxy"
 import { readSetting, writeSetting } from "@/lib/storage"
 
-/**
- * GitHub Pages build (`vite build --mode pages`): there is no proxy, and the
- * feed host and OpenSky block browser requests (no CORS), so the feed is opened
- * as a downloaded .ics file and tail signs are entered by hand.
- */
-const STATIC = import.meta.env.MODE === "pages"
-
-/** schedule.swiss.com has no CORS headers, so go through the Vite proxy. */
+/** schedule.swiss.com has no CORS headers, so go through the proxy. */
 function toFetchUrl(feedUrl: string): string {
   const url = new URL(feedUrl.trim().replace(/^webcals?:\/\//, "https://"))
   if (url.hostname === "schedule.swiss.com") {
-    return `/proxy/swiss-schedule${url.pathname}${url.search}`
+    return `${PROXY}/swiss-schedule${url.pathname}${url.search}`
   }
   return url.toString()
 }
@@ -103,7 +97,7 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (feedUrl && !STATIC) void loadFeed(feedUrl)
+    if (feedUrl) void loadFeed(feedUrl)
     // Only auto-load the remembered feed once on startup.
   }, [])
 
@@ -219,21 +213,19 @@ export default function App() {
             <p className="text-sm text-muted-foreground">Flights from your crew schedule feed, times in UTC</p>
           </div>
         </div>
-        {!STATIC && (
-          <SettingsDialog
-            creds={creds}
-            onSave={(next) => {
-              setCreds(next)
-              writeSetting("openskyClientId", next.clientId)
-              writeSetting("openskyClientSecret", next.clientSecret)
-            }}
-            onClearCache={() => {
-              clearCache()
-              setTails({})
-              toast.success("Tail sign cache cleared")
-            }}
-          />
-        )}
+        <SettingsDialog
+          creds={creds}
+          onSave={(next) => {
+            setCreds(next)
+            writeSetting("openskyClientId", next.clientId)
+            writeSetting("openskyClientSecret", next.clientSecret)
+          }}
+          onClearCache={() => {
+            clearCache()
+            setTails({})
+            toast.success("Tail sign cache cleared")
+          }}
+        />
       </header>
 
       <Card>
@@ -249,48 +241,35 @@ export default function App() {
               e.target.value = ""
             }}
           />
-          {STATIC ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button onClick={() => fileInputRef.current?.click()}>
-                <UploadIcon />
-                Open .ics file
+          <form
+            className="flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void loadFeed(feedUrl)
+            }}
+          >
+            <Input
+              type="url"
+              placeholder="https://schedule.swiss.com/…/….ics"
+              value={feedUrl}
+              onChange={(e) => setFeedUrl(e.target.value)}
+              className="flex-1 font-mono text-xs"
+            />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={loading || !feedUrl.trim()}>
+                {loading ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
+                Load feed
               </Button>
-              <p className="text-sm text-muted-foreground">
-                Open your schedule feed URL in the browser to download the .ics file, then open it here. The file is
-                read locally and never uploaded.
-              </p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
+                    <UploadIcon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open an .ics file instead</TooltipContent>
+              </Tooltip>
             </div>
-          ) : (
-            <form
-              className="flex flex-col gap-2 sm:flex-row"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void loadFeed(feedUrl)
-              }}
-            >
-              <Input
-                type="url"
-                placeholder="https://schedule.swiss.com/…/….ics"
-                value={feedUrl}
-                onChange={(e) => setFeedUrl(e.target.value)}
-                className="flex-1 font-mono text-xs"
-              />
-              <div className="flex gap-2">
-                <Button type="submit" disabled={loading || !feedUrl.trim()}>
-                  {loading ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
-                  Load feed
-                </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
-                      <UploadIcon />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Open an .ics file instead</TooltipContent>
-                </Tooltip>
-              </div>
-            </form>
-          )}
+          </form>
           {loadedAt && (
             <p className="mt-2 text-xs text-muted-foreground">
               {flights.length} flights in feed (excluding deadheads) · loaded {format(loadedAt, "HH:mm:ss")}
@@ -302,7 +281,7 @@ export default function App() {
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker range={range} onChange={setRange} flights={flights} />
         <div className="ml-auto flex gap-2">
-          {STATIC ? null : lookup ? (
+          {lookup ? (
             <Button variant="outline" onClick={() => abortRef.current?.abort()}>
               <SquareIcon />
               Stop ({lookup.done}/{lookup.total})
@@ -396,10 +375,9 @@ export default function App() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Times are scheduled times from the roster. Deadhead flights are not listed.{" "}
-        {STATIC
-          ? "Click a tail cell to enter the registration; it is saved in this browser."
-          : "Tail signs are matched from OpenSky Network ADS-B data and hexdb.io; flights become available the day after they operated. Click a tail sign to correct it manually."}
+        Times are scheduled times from the roster. Deadhead flights are not listed. Tail signs are matched from OpenSky
+        Network ADS-B data and hexdb.io; flights become available the day after they operated. Click a tail sign to
+        correct it manually.
       </p>
     </div>
   )

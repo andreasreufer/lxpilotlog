@@ -18,18 +18,24 @@ npm test
 
 ## GitHub Pages
 
-`npm run build:pages` builds a static version (base `/lxpilotlog/`), and
-`.github/workflows/pages.yml` deploys it on every push to `main` (set
-*Settings → Pages → Source* to *GitHub Actions*). Pages has no proxy, so the
-static version opens the feed as a downloaded `.ics` file and tail signs are
-entered by hand; the OpenSky lookup only works with `npm run dev`.
+The feed host and OpenSky block requests from web pages (no CORS headers).
+Locally the Vite server relays them; on GitHub Pages a small Cloudflare Worker
+([proxy/worker.ts](proxy/worker.ts)) does the same, limited to the hosts in
+[proxy/upstreams.ts](proxy/upstreams.ts).
+
+1. Deploy the worker (free Cloudflare account):
+   `npx wrangler login && npx wrangler deploy`. Note the
+   `https://lxpilotlog-proxy.<you>.workers.dev` URL it prints.
+2. In the GitHub repo, add the Actions variable `PROXY_URL` with that URL
+   (*Settings → Secrets and variables → Actions → Variables*).
+3. Set *Settings → Pages → Source* to *GitHub Actions* and push to `main`.
+   `.github/workflows/pages.yml` runs `npm run build:pages` (base
+   `/lxpilotlog/`) and deploys.
 
 ## Notes
 
-- **Feed loading** – `schedule.swiss.com` sends no CORS headers, so the app
-  fetches it through the Vite dev/preview proxy (`/proxy/…`, see
-  `vite.config.ts`). A static deployment needs an equivalent proxy. You can
-  also open a downloaded `.ics` file.
+- **Feed loading** – through the proxy (see above). You can also open a
+  downloaded `.ics` file.
 - **Flights** – events whose summary looks like
   `LX1480 ZRH 0827 PRG 0951 221 [CM]` are treated as flights; everything else
   (days off, simulator, …) and deadhead legs (`[DH]`) are ignored. UTC times

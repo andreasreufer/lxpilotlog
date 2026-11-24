@@ -1,5 +1,6 @@
 import type { Flight } from "./flights"
 import { toIcao } from "./airports"
+import { PROXY } from "./proxy"
 
 /**
  * Aircraft registration lookup from free sources:
@@ -12,10 +13,10 @@ import { toIcao } from "./airports"
  * 2. hexdb.io maps the transponder address to the registration, no key needed.
  *
  * OpenSky sends no CORS headers for third-party origins, so its API and auth
- * server go through the Vite proxy (see vite.config.ts).
+ * server go through the proxy (see src/lib/proxy.ts).
  */
-const OPENSKY_API = "/proxy/opensky/api"
-const OPENSKY_TOKEN_URL = "/proxy/opensky-auth/auth/realms/opensky-network/protocol/openid-connect/token"
+const OPENSKY_API = `${PROXY}/opensky/api`
+const OPENSKY_TOKEN_URL = `${PROXY}/opensky-auth/auth/realms/opensky-network/protocol/openid-connect/token`
 const HEXDB_API = "https://hexdb.io/api/v1/aircraft"
 
 const CACHE_KEY = "lxpilotlog.tails.v2"

@@ -2,14 +2,7 @@ import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type ProxyOptions } from 'vite'
-
-// These hosts do not send CORS headers for our origin, so the browser cannot
-// call them directly. Route them through the dev/preview server instead.
-const upstreams = {
-  'swiss-schedule': 'https://schedule.swiss.com',
-  opensky: 'https://opensky-network.org',
-  'opensky-auth': 'https://auth.opensky-network.org',
-}
+import { upstreams } from './proxy/upstreams.ts'
 
 const proxy: Record<string, ProxyOptions> = Object.fromEntries(
   Object.entries(upstreams).map(([name, target]) => [
