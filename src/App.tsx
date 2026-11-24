@@ -174,10 +174,10 @@ export default function App() {
   }
 
   function exportCsv() {
-    const header = ["Date (UTC)", "Flight", "From", "To", "Dep (UTC)", "Arr (UTC)", "Block", "Type", "Role", "Tail"]
+    const header = ["Flight", "Date (UTC)", "From", "To", "Dep (UTC)", "Arr (UTC)", "Block", "Type", "Role", "Tail"]
     const rows = visible.map((f) => [
-      formatUtcDate(f.departureUtc),
       f.flightNumber,
+      formatUtcDate(f.departureUtc),
       toIcao(f.from) ?? f.from,
       toIcao(f.to) ?? f.to,
       formatUtcTime(f.departureUtc),
@@ -298,8 +298,8 @@ export default function App() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-4">Date (UTC)</TableHead>
-              <TableHead>Flight</TableHead>
+              <TableHead className="pl-4">Flight</TableHead>
+              <TableHead>Date (UTC)</TableHead>
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
               <TableHead>Dep (UTC)</TableHead>
@@ -324,8 +324,8 @@ export default function App() {
                 const key = tailKey(f)
                 return (
                   <TableRow key={f.uid}>
-                    <TableCell className="pl-4 tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
-                    <TableCell className="font-medium">{f.flightNumber}</TableCell>
+                    <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
+                    <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
                     <TableCell>
                       <Airport iata={f.from} />
                     </TableCell>
