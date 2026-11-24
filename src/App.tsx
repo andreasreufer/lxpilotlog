@@ -370,7 +370,16 @@ export default function App() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Times are scheduled times from the roster. Deadhead flights are not listed. Tail signs come from FlightAware
+        Version{" "}
+        <a
+          className="underline underline-offset-2"
+          href={`https://github.com/andreasreufer/lxpilotlog/commit/${import.meta.env.VITE_COMMIT}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {import.meta.env.VITE_VERSION}
+        </a>
+        . Times are scheduled times from the roster. Deadhead flights are not listed. Tail signs come from FlightAware
         AeroAPI and can be looked up for flights from the last 10 days up to 2 days ahead. Click a tail sign to correct
         it manually.
       </p>
