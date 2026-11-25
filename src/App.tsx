@@ -335,7 +335,7 @@ export default function App() {
                     data-window={
                       inWindow(i) ? `${i === start ? "first " : ""}${i === end - 1 ? "last" : ""}` : undefined
                     }
-                    className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "text-muted-foreground/60")}
+                    className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "opacity-50")}
                     onClick={(e) => {
                       // Clicks on the tail sign editor shouldn't move the window.
                       if (!(e.target as HTMLElement).closest("button, input, a")) setWindowStart(i)
