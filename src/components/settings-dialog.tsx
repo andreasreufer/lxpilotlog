@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { SettingsIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -19,10 +19,13 @@ export function SettingsDialog({
   apiKey,
   onSave,
   onClearCache,
+  children,
 }: {
   apiKey: string
   onSave: (key: string) => void
   onClearCache: () => void
+  /** The calendar feed form */
+  children: ReactNode
 }) {
   const [draft, setDraft] = useState(apiKey)
 
@@ -35,8 +38,16 @@ export function SettingsDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tail sign lookup</DialogTitle>
-          <DialogDescription>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Everything here is stored only in this browser.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Label htmlFor="feed-url">Calendar feed</Label>
+          {children}
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="api-key">AeroAPI key</Label>
+          <p className="text-sm text-muted-foreground">
             Tail signs come from{" "}
             <a
               className="underline underline-offset-2"
@@ -46,12 +57,8 @@ export function SettingsDialog({
             >
               FlightAware AeroAPI
             </a>
-            . The Personal tier includes $5 of free usage per month. Create an API key there and paste it here. It is
-            stored only in this browser.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-2">
-          <Label htmlFor="api-key">AeroAPI key</Label>
+            . The Personal tier includes $5 of free usage per month. Create an API key there and paste it here.
+          </p>
           <Input
             id="api-key"
             type="password"

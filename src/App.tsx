@@ -19,7 +19,7 @@ import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -230,11 +230,7 @@ export default function App() {
             setTails({})
             toast.success("Tail sign cache cleared")
           }}
-        />
-      </header>
-
-      <Card>
-        <CardContent>
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -254,6 +250,7 @@ export default function App() {
             }}
           >
             <Input
+              id="feed-url"
               type="url"
               placeholder="https://schedule.swiss.com/…/….ics"
               value={feedUrl}
@@ -280,8 +277,8 @@ export default function App() {
               {flights.length} flights in feed (excluding deadheads) · loaded {format(loadedAt, "HH:mm:ss")}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </SettingsDialog>
+      </header>
 
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker range={range} onChange={setRange} flights={flights} />
@@ -325,7 +322,7 @@ export default function App() {
               <TableRow>
                 <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                   {flights.length === 0
-                    ? "Load a calendar feed to see your flights."
+                    ? "Add your calendar feed in the settings (gear icon) to see your flights."
                     : "No flights in this date range."}
                 </TableCell>
               </TableRow>
