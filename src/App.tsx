@@ -333,7 +333,11 @@ export default function App() {
               visible.map((f, i) => {
                 const key = tailKey(f)
                 return (
-                  <TableRow key={f.uid} data-state={inWindow(i) ? "selected" : undefined}>
+                  <TableRow
+                    key={f.uid}
+                    data-state={inWindow(i) ? "selected" : undefined}
+                    className={f.arrivalUtc.getTime() > Date.now() ? "bg-muted/40" : undefined}
+                  >
                     <TableCell className="pl-4">
                       <Checkbox
                         aria-label={`Start window at ${f.flightNumber}`}
