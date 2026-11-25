@@ -128,3 +128,24 @@
     @apply font-sans;
     }
 }
+/* Light frame around the block-time window; App marks its rows with data-window="first last". */
+tr[data-window] > td {
+  --frame: color-mix(in oklab, var(--primary) 35%, transparent);
+  box-shadow:
+    inset var(--l, 0) 0 var(--frame),
+    inset calc(-1 * var(--r, 0px)) 0 var(--frame),
+    inset 0 var(--t, 0) var(--frame),
+    inset 0 calc(-1 * var(--b, 0px)) var(--frame);
+}
+tr[data-window] > td:first-child {
+  --l: 2px;
+}
+tr[data-window] > td:last-child {
+  --r: 2px;
+}
+tr[data-window~="first"] {
+  --t: 2px;
+}
+tr[data-window~="last"] {
+  --b: 2px;
+}

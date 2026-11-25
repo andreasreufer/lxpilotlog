@@ -15,11 +15,11 @@ import {
   UploadIcon,
 } from "lucide-react"
 
+import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -113,7 +113,8 @@ export default function App() {
   const totalBlock = visible.reduce((sum, f) => sum + blockMinutes(f), 0)
   // Window of consecutive shown flights; kept inside the list when the date range shrinks.
   const start = windowStart === undefined ? undefined : Math.max(0, Math.min(windowStart, visible.length - windowSize))
-  const inWindow = (i: number) => start !== undefined && i >= start && i < start + windowSize
+  const end = start === undefined ? 0 : Math.min(start + windowSize, visible.length)
+  const inWindow = (i: number) => start !== undefined && i >= start && i < end
   const windowBlock = visible.filter((_, i) => inWindow(i)).reduce((sum, f) => sum + blockMinutes(f), 0)
 
   const tailFor = (f: Flight): string | undefined => {
@@ -307,8 +308,7 @@ export default function App() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-8 pl-4" />
-              <TableHead>Flight</TableHead>
+              <TableHead className="pl-4">Flight</TableHead>
               <TableHead>Date (UTC)</TableHead>
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
@@ -323,7 +323,7 @@ export default function App() {
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                   {flights.length === 0
                     ? "Load a calendar feed to see your flights."
                     : "No flights in this date range."}
@@ -335,20 +335,16 @@ export default function App() {
                 return (
                   <TableRow
                     key={f.uid}
-                    data-state={inWindow(i) ? "selected" : undefined}
-                    className={f.arrivalUtc.getTime() > Date.now() ? "bg-muted/40" : undefined}
+                    data-window={
+                      inWindow(i) ? `${i === start ? "first " : ""}${i === end - 1 ? "last" : ""}` : undefined
+                    }
+                    className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "bg-muted/40")}
+                    onClick={(e) => {
+                      // Clicks on the tail sign editor shouldn't move the window.
+                      if (!(e.target as HTMLElement).closest("button, input, a")) setWindowStart(i)
+                    }}
                   >
-                    <TableCell className="pl-4">
-                      <Checkbox
-                        aria-label={`Start window at ${f.flightNumber}`}
-                        checked={inWindow(i)}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setWindowStart(i)
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{f.flightNumber}</TableCell>
+                    <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
                     <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
                     <TableCell>
                       <Airport iata={f.from} />
@@ -382,7 +378,7 @@ export default function App() {
           {visible.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={7} className="pl-4">
+                <TableCell colSpan={6} className="pl-4">
                   <div className="flex items-center gap-2">
                     Window of
                     <Input
@@ -415,11 +411,11 @@ export default function App() {
                       <ChevronRightIcon />
                     </Button>
                     {start === undefined ? (
-                      <span className="text-muted-foreground">Tick a flight to start the window there</span>
+                      <span className="text-muted-foreground">Click a flight to start the window there</span>
                     ) : (
                       <>
                         <span className="text-muted-foreground">
-                          flights {start + 1}–{Math.min(start + windowSize, visible.length)}
+                          flights {start + 1}–{end}
                         </span>
                         <Button
                           variant="link"
@@ -439,7 +435,7 @@ export default function App() {
                 <TableCell colSpan={3} />
               </TableRow>
               <TableRow>
-                <TableCell colSpan={7} className="pl-4">
+                <TableCell colSpan={6} className="pl-4">
                   {visible.length} flights
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
