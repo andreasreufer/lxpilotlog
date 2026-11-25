@@ -243,7 +243,7 @@ export default function App() {
             }}
           />
           <form
-            className="flex flex-col gap-2 sm:flex-row"
+            className="flex flex-col gap-2"
             onSubmit={(e) => {
               e.preventDefault()
               void loadFeed(feedUrl)
