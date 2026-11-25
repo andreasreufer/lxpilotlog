@@ -315,8 +315,8 @@ export default function App() {
               <TableHead>Dep (UTC)</TableHead>
               <TableHead>Arr (UTC)</TableHead>
               <TableHead className="text-right">Block</TableHead>
-              <TableHead>Type</TableHead>
               <TableHead>Tail</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead className="pr-4">Role</TableHead>
             </TableRow>
           </TableHeader>
@@ -360,7 +360,6 @@ export default function App() {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatDuration(blockMinutes(f))}</TableCell>
-                    <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
                     <TableCell>
                       <TailCell
                         state={tails[key]}
@@ -369,6 +368,7 @@ export default function App() {
                         onOverride={(reg) => setOverride(f, reg)}
                       />
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
                     <TableCell className="pr-4">{f.role && <Badge variant="outline">{f.role}</Badge>}</TableCell>
                   </TableRow>
                 )
