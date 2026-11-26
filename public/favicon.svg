@@ -1,4 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#4f46e5"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="32" font-weight="600" fill="#ffffff">L</text>
+  <!-- Swiss-red tile with the Swiss cross, an open logbook and a pen -->
+  <rect width="64" height="64" rx="14" fill="#E2001A"/>
+  <path d="M15 8h5v5h5v5h-5v5h-5v-5h-5v-5h5z" fill="#fff"/>
+  <!-- open logbook -->
+  <path d="M8 30c7-2 15-1 23 3v23c-8-4-16-5-23-3z" fill="#fff"/>
+  <path d="M56 30c-7-2-15-1-23 3v23c8-4 16-5 23-3z" fill="#fff"/>
+  <g stroke="#E2001A" stroke-width="1.6" stroke-linecap="round" opacity=".55">
+    <path d="M12 37c5-1 10 0 15 2M12 42c5-1 10 0 15 2M12 47c5-1 10 0 15 2"/>
+    <path d="M37 39c5-2 10-3 15-2M37 44c5-2 10-3 15-2"/>
+  </g>
+  <!-- pen -->
+  <g transform="rotate(45 44 22)">
+    <rect x="41" y="4" width="6" height="26" rx="1.5" fill="#1d1d1f"/>
+    <rect x="41" y="8" width="6" height="2.5" fill="#fff" opacity=".8"/>
+    <path d="M41 30h6l-3 6z" fill="#fff"/>
+    <path d="M43 33h2l-1 3z" fill="#1d1d1f"/>
+  </g>
 </svg>

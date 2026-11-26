@@ -8,7 +8,6 @@ import {
   ChevronRightIcon,
   DownloadIcon,
   Loader2Icon,
-  PlaneIcon,
   PlusIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -272,9 +271,7 @@ export default function App() {
     <div className="mx-auto flex min-h-svh max-w-6xl flex-col gap-6 p-4 sm:p-8">
       <header className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <PlaneIcon className="size-5" />
-          </div>
+          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" className="size-10" />
           <div>
             <h1 className="text-xl font-semibold">LXpilotLog</h1>
             <p className="text-sm text-muted-foreground">Flights from your crew schedule feed, times in UTC</p>
