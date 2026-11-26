@@ -1,19 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Swiss-red tile with the Swiss cross, an open logbook and a pen -->
-  <rect width="64" height="64" rx="14" fill="#E2001A"/>
-  <path d="M15 8h5v5h5v5h-5v5h-5v-5h-5v-5h5z" fill="#fff"/>
+  <!-- A red tailfin with the Swiss cross, an open logbook and a pen -->
+  <rect width="64" height="64" rx="14" fill="#f4f4f5"/>
+  <!-- tailfin -->
+  <path d="M6 38 18 6h14L26 38z" fill="#E2001A"/>
+  <path d="M17.2 14h4.6v4.6h4.6v4.6h-4.6v4.6h-4.6v-4.6h-4.6v-4.6h4.6z" fill="#fff"/>
   <!-- open logbook -->
-  <path d="M8 30c7-2 15-1 23 3v23c-8-4-16-5-23-3z" fill="#fff"/>
-  <path d="M56 30c-7-2-15-1-23 3v23c8-4 16-5 23-3z" fill="#fff"/>
-  <g stroke="#E2001A" stroke-width="1.6" stroke-linecap="round" opacity=".55">
-    <path d="M12 37c5-1 10 0 15 2M12 42c5-1 10 0 15 2M12 47c5-1 10 0 15 2"/>
-    <path d="M37 39c5-2 10-3 15-2M37 44c5-2 10-3 15-2"/>
+  <path d="M8 36c7-2 15-1 23 3v19c-8-4-16-5-23-3z" fill="#fff" stroke="#1d1d1f" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M56 36c-7-2-15-1-23 3v19c8-4 16-5 23-3z" fill="#fff" stroke="#1d1d1f" stroke-width="2" stroke-linejoin="round"/>
+  <g stroke="#1d1d1f" stroke-width="1.6" stroke-linecap="round" opacity=".45">
+    <path d="M12 43c5-1 10 0 15 2M12 48c5-1 10 0 15 2"/>
+    <path d="M37 45c5-2 10-3 15-2M37 50c5-2 10-3 15-2"/>
   </g>
   <!-- pen -->
-  <g transform="rotate(45 44 22)">
-    <rect x="41" y="4" width="6" height="26" rx="1.5" fill="#1d1d1f"/>
-    <rect x="41" y="8" width="6" height="2.5" fill="#fff" opacity=".8"/>
-    <path d="M41 30h6l-3 6z" fill="#fff"/>
-    <path d="M43 33h2l-1 3z" fill="#1d1d1f"/>
+  <g transform="rotate(40 46 22)">
+    <rect x="43" y="6" width="6" height="24" rx="1.5" fill="#1d1d1f"/>
+    <rect x="43" y="10" width="6" height="2.5" fill="#E2001A"/>
+    <path d="M43 30h6l-3 6z" fill="#e4e4e7" stroke="#1d1d1f" stroke-width="1"/>
+    <path d="M45 33.5h2l-1 2.5z" fill="#1d1d1f"/>
   </g>
 </svg>
