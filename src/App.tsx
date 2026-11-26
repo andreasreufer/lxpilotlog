@@ -518,7 +518,7 @@ export default function App() {
 
         {flights.length > 0 && (
           <div
-            className={cn(totalsTop !== undefined && "absolute inset-x-0 z-20 drop-shadow-xl")}
+            className={cn(totalsTop !== undefined && "absolute -inset-x-4 z-20 drop-shadow-xl")}
             style={totalsTop === undefined ? undefined : { top: totalsTop + 24 }}
           >
             <LogbookTotals
