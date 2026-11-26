@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { endOfMonth, format, startOfMonth, subDays, subMonths } from "date-fns"
 import type { DateRange } from "react-day-picker"
 import { toast } from "sonner"
@@ -68,6 +68,8 @@ export default function App() {
   const [windowSize, setWindowSize] = useState(7)
   const [previousPages, setPreviousPages] = useState(loadPrevious)
   const [pageEntries, setPageEntries] = useState<string[]>([])
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [totalsTop, setTotalsTop] = useState<number>()
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -121,6 +123,14 @@ export default function App() {
   const end = start === undefined ? 0 : Math.min(start + windowSize, visible.length)
   const inWindow = (i: number) => start !== undefined && i >= start && i < end
   const windowBlock = visible.filter((_, i) => inWindow(i)).reduce((sum, f) => sum + blockMinutes(f), 0)
+
+  // The totals hover just below the window's last row, wherever the table layout put it.
+  // shortcut: not re-measured on window resize, add a ResizeObserver if rows start wrapping.
+  useLayoutEffect(() => {
+    const wrap = tableRef.current
+    const row = start === undefined ? undefined : wrap?.querySelector("table")?.tBodies[0]?.rows[end - 1]
+    setTotalsTop(wrap && row ? row.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top : undefined)
+  }, [start, end, visible])
 
   function updatePreviousPages(values: string[]) {
     setPreviousPages(values)
@@ -346,174 +356,181 @@ export default function App() {
         </div>
       </div>
 
-      <Card className="py-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-4">Flight</TableHead>
-              <TableHead>Date (UTC)</TableHead>
-              <TableHead>From</TableHead>
-              <TableHead>To</TableHead>
-              <TableHead>Dep (UTC)</TableHead>
-              <TableHead>Arr (UTC)</TableHead>
-              <TableHead className="text-right">Block</TableHead>
-              <TableHead>Tail</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="pr-4">Role</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visible.length === 0 ? (
+      <div ref={tableRef} className="relative flex flex-col gap-6">
+        <Card className="py-0">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                  {flights.length === 0
-                    ? "Add your calendar feed in the settings (gear icon) to see your flights."
-                    : "No flights in this date range."}
-                </TableCell>
+                <TableHead className="pl-4">Flight</TableHead>
+                <TableHead>Date (UTC)</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Dep (UTC)</TableHead>
+                <TableHead>Arr (UTC)</TableHead>
+                <TableHead className="text-right">Block</TableHead>
+                <TableHead>Tail</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="pr-4">Role</TableHead>
               </TableRow>
-            ) : (
-              visible.map((f, i) => {
-                const key = tailKey(f)
-                return (
-                  <TableRow
-                    key={f.uid}
-                    data-window={
-                      inWindow(i) ? `${i === start ? "first " : ""}${i === end - 1 ? "last" : ""}` : undefined
-                    }
-                    className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "opacity-50")}
-                    onClick={(e) => {
-                      // Clicks on the tail sign editor shouldn't move the window.
-                      if (!(e.target as HTMLElement).closest("button, input, a")) setWindowStart(i)
-                    }}
-                  >
-                    <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
-                    <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
-                    <TableCell>
-                      <Airport iata={f.from} />
-                    </TableCell>
-                    <TableCell>
-                      <Airport iata={f.to} />
-                    </TableCell>
-                    <TableCell className="tabular-nums">{formatUtcTime(f.departureUtc)}</TableCell>
-                    <TableCell className="tabular-nums">
-                      {formatUtcTime(f.arrivalUtc)}
-                      {formatUtcDate(f.arrivalUtc) !== formatUtcDate(f.departureUtc) && (
-                        <sup className="ml-0.5 text-muted-foreground">+1</sup>
-                      )}
-                    </TableCell>
-                    <TableCell className="relative text-right tabular-nums">
-                      {formatDuration(blockMinutes(f))}
-                      {i === end - 1 && (
-                        <span className="absolute right-0 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-md border bg-background py-0.5 pr-0.5 pl-2 font-semibold shadow-sm">
-                          Σ {formatDuration(windowBlock)}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-5"
-                                aria-label="Add this page to the total previous pages"
-                                onClick={addWindowToPreviousPages}
-                              >
-                                <PlusIcon />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Add this page to the total previous pages</TooltipContent>
-                          </Tooltip>
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <TailCell
-                        state={tails[key]}
-                        override={overrides[key]}
-                        available={isLookupAvailable(f)}
-                        onOverride={(reg) => setOverride(f, reg)}
+            </TableHeader>
+            <TableBody>
+              {visible.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                    {flights.length === 0
+                      ? "Add your calendar feed in the settings (gear icon) to see your flights."
+                      : "No flights in this date range."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visible.map((f, i) => {
+                  const key = tailKey(f)
+                  return (
+                    <TableRow
+                      key={f.uid}
+                      data-window={
+                        inWindow(i) ? `${i === start ? "first " : ""}${i === end - 1 ? "last" : ""}` : undefined
+                      }
+                      className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "opacity-50")}
+                      onClick={(e) => {
+                        // Clicks on the tail sign editor shouldn't move the window.
+                        if (!(e.target as HTMLElement).closest("button, input, a")) setWindowStart(i)
+                      }}
+                    >
+                      <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
+                      <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
+                      <TableCell>
+                        <Airport iata={f.from} />
+                      </TableCell>
+                      <TableCell>
+                        <Airport iata={f.to} />
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatUtcTime(f.departureUtc)}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatUtcTime(f.arrivalUtc)}
+                        {formatUtcDate(f.arrivalUtc) !== formatUtcDate(f.departureUtc) && (
+                          <sup className="ml-0.5 text-muted-foreground">+1</sup>
+                        )}
+                      </TableCell>
+                      <TableCell className="relative text-right tabular-nums">
+                        {formatDuration(blockMinutes(f))}
+                        {i === end - 1 && (
+                          <span className="absolute right-0 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-md border bg-background py-0.5 pr-0.5 pl-2 font-semibold shadow-sm">
+                            Σ {formatDuration(windowBlock)}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-5"
+                                  aria-label="Add this page to the total previous pages"
+                                  onClick={addWindowToPreviousPages}
+                                >
+                                  <PlusIcon />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Add this page to the total previous pages</TooltipContent>
+                            </Tooltip>
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <TailCell
+                          state={tails[key]}
+                          override={overrides[key]}
+                          available={isLookupAvailable(f)}
+                          onOverride={(reg) => setOverride(f, reg)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
+                      <TableCell className="pr-4">{f.role && <Badge variant="outline">{f.role}</Badge>}</TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+            {visible.length > 0 && (
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={10} className="pl-4">
+                    <div className="flex items-center gap-2">
+                      Window of
+                      <Input
+                        type="number"
+                        min={1}
+                        aria-label="Flights in window"
+                        value={windowSize}
+                        onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value) || 1))}
+                        className="h-7 w-16"
                       />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
-                    <TableCell className="pr-4">{f.role && <Badge variant="outline">{f.role}</Badge>}</TableCell>
-                  </TableRow>
-                )
-              })
+                      flights
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-7"
+                        aria-label="Move window to earlier flights"
+                        disabled={start === undefined || start === 0}
+                        onClick={() => setWindowStart((start ?? 0) - 1)}
+                      >
+                        <ChevronLeftIcon />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-7"
+                        aria-label="Move window to later flights"
+                        disabled={start !== undefined && start + windowSize >= visible.length}
+                        onClick={() => setWindowStart(start === undefined ? 0 : start + 1)}
+                      >
+                        <ChevronRightIcon />
+                      </Button>
+                      {start === undefined ? (
+                        <span className="text-muted-foreground">Click a flight to start the window there</span>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground">
+                            flights {start + 1}–{end}
+                          </span>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0"
+                            onClick={() => setWindowStart(undefined)}
+                          >
+                            Clear
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={6} className="pl-4">
+                    {visible.length} flights
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
+                  <TableCell colSpan={3} />
+                </TableRow>
+              </TableFooter>
             )}
-          </TableBody>
-          {visible.length > 0 && (
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={10} className="pl-4">
-                  <div className="flex items-center gap-2">
-                    Window of
-                    <Input
-                      type="number"
-                      min={1}
-                      aria-label="Flights in window"
-                      value={windowSize}
-                      onChange={(e) => setWindowSize(Math.max(1, Number(e.target.value) || 1))}
-                      className="h-7 w-16"
-                    />
-                    flights
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-7"
-                      aria-label="Move window to earlier flights"
-                      disabled={start === undefined || start === 0}
-                      onClick={() => setWindowStart((start ?? 0) - 1)}
-                    >
-                      <ChevronLeftIcon />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-7"
-                      aria-label="Move window to later flights"
-                      disabled={start !== undefined && start + windowSize >= visible.length}
-                      onClick={() => setWindowStart(start === undefined ? 0 : start + 1)}
-                    >
-                      <ChevronRightIcon />
-                    </Button>
-                    {start === undefined ? (
-                      <span className="text-muted-foreground">Click a flight to start the window there</span>
-                    ) : (
-                      <>
-                        <span className="text-muted-foreground">
-                          flights {start + 1}–{end}
-                        </span>
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0"
-                          onClick={() => setWindowStart(undefined)}
-                        >
-                          Clear
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell colSpan={6} className="pl-4">
-                  {visible.length} flights
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
-                <TableCell colSpan={3} />
-              </TableRow>
-            </TableFooter>
-          )}
-        </Table>
-      </Card>
+          </Table>
+        </Card>
 
-      {flights.length > 0 && (
-        <LogbookTotals
-          page={start === undefined ? [] : visible.slice(start, end)}
-          pageEntries={pageEntries}
-          onPageEntriesChange={setPageEntries}
-          previous={previousPages}
-          onPreviousChange={updatePreviousPages}
-        />
-      )}
+        {flights.length > 0 && (
+          <div
+            className={cn(totalsTop !== undefined && "absolute inset-x-0 z-20 drop-shadow-xl")}
+            style={totalsTop === undefined ? undefined : { top: totalsTop + 24 }}
+          >
+            <LogbookTotals
+              page={start === undefined ? [] : visible.slice(start, end)}
+              pageEntries={pageEntries}
+              onPageEntriesChange={setPageEntries}
+              previous={previousPages}
+              onPreviousChange={updatePreviousPages}
+            />
+          </div>
+        )}
+      </div>
 
       <p className="text-xs text-muted-foreground">
         Version{" "}
