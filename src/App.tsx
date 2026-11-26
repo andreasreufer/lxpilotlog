@@ -14,6 +14,7 @@ import {
   SearchIcon,
   SquareIcon,
   UploadIcon,
+  XIcon,
 } from "lucide-react"
 
 import { cn } from "cn"
@@ -69,7 +70,8 @@ export default function App() {
   const [previousPages, setPreviousPages] = useState(loadPrevious)
   const [pageEntries, setPageEntries] = useState<string[]>([])
   const tableRef = useRef<HTMLDivElement>(null)
-  const [totalsTop, setTotalsTop] = useState<number>()
+  // Window's top and bottom edge, relative to tableRef.
+  const [frame, setFrame] = useState<{ top: number; bottom: number }>()
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -124,13 +126,33 @@ export default function App() {
   const inWindow = (i: number) => start !== undefined && i >= start && i < end
   const windowBlock = visible.filter((_, i) => inWindow(i)).reduce((sum, f) => sum + blockMinutes(f), 0)
 
-  // The totals hover just below the window's last row, wherever the table layout put it.
+  const flightRows = () => [...(tableRef.current?.querySelector("table")?.tBodies[0]?.rows ?? [])]
+
+  // The drag handles and totals sit on the window's edges, wherever the table layout put them.
   // shortcut: not re-measured on window resize, add a ResizeObserver if rows start wrapping.
   useLayoutEffect(() => {
-    const wrap = tableRef.current
-    const row = start === undefined ? undefined : wrap?.querySelector("table")?.tBodies[0]?.rows[end - 1]
-    setTotalsTop(wrap && row ? row.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top : undefined)
+    const wrap = tableRef.current?.getBoundingClientRect()
+    const rows = flightRows()
+    const first = start === undefined ? undefined : rows[start]?.getBoundingClientRect()
+    const last = rows[end - 1]?.getBoundingClientRect()
+    setFrame(wrap && first && last ? { top: first.top - wrap.top, bottom: last.bottom - wrap.top } : undefined)
   }, [start, end, visible])
+
+  /** Drag the window's top or bottom edge onto another flight to resize it. */
+  function dragEdge(edge: "top" | "bottom", e: React.PointerEvent<HTMLDivElement>) {
+    if (start === undefined || !e.currentTarget.hasPointerCapture(e.pointerId)) return
+    const rows = flightRows()
+    // The flight under the pointer, or the last one when dragged below the list.
+    const i = rows.findIndex((row) => e.clientY < row.getBoundingClientRect().bottom)
+    const at = i === -1 ? rows.length - 1 : i
+    if (edge === "top") {
+      const first = Math.min(at, end - 1)
+      setWindowStart(first)
+      setWindowSize(end - first)
+    } else {
+      setWindowSize(Math.max(at + 1, start + 1) - start)
+    }
+  }
 
   function updatePreviousPages(values: string[]) {
     setPreviousPages(values)
@@ -357,6 +379,18 @@ export default function App() {
       </div>
 
       <div ref={tableRef} className="relative flex flex-col gap-6">
+        {frame &&
+          (["top", "bottom"] as const).map((edge) => (
+            <div
+              key={edge}
+              role="separator"
+              aria-label={`Drag to move the window's ${edge} edge`}
+              className="absolute inset-x-0 z-[5] h-2 -translate-y-1/2 cursor-ns-resize touch-none"
+              style={{ top: frame[edge] }}
+              onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+              onPointerMove={(e) => dragEdge(edge, e)}
+            />
+          ))}
         <Card className="py-0">
           <Table>
             <TableHeader>
@@ -443,7 +477,20 @@ export default function App() {
                         />
                       </TableCell>
                       <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
-                      <TableCell className="pr-4">{f.role && <Badge variant="outline">{f.role}</Badge>}</TableCell>
+                      <TableCell className="relative pr-4">
+                        {f.role && <Badge variant="outline">{f.role}</Badge>}
+                        {i === end - 1 && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="absolute right-1 bottom-0 z-10 size-6 translate-y-1/2 rounded-full bg-background shadow-sm"
+                            aria-label="Clear the window"
+                            onClick={() => setWindowStart(undefined)}
+                          >
+                            <XIcon />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   )
                 })
@@ -518,8 +565,8 @@ export default function App() {
 
         {flights.length > 0 && (
           <div
-            className={cn(totalsTop !== undefined && "absolute -inset-x-4 z-20 drop-shadow-xl")}
-            style={totalsTop === undefined ? undefined : { top: totalsTop + 24 }}
+            className={cn(frame && "absolute -inset-x-4 z-20 drop-shadow-xl")}
+            style={frame && { top: frame.bottom + 24 }}
           >
             <LogbookTotals
               page={start === undefined ? [] : visible.slice(start, end)}
