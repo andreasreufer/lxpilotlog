@@ -429,24 +429,24 @@ export default function App() {
                       }}
                     >
                       <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
-                      <TableCell className="tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-base tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
+                      <TableCell className="text-base">
                         <Airport iata={f.from} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-base">
                         <Airport iata={f.to} />
                       </TableCell>
-                      <TableCell className="tabular-nums">{formatUtcTime(f.departureUtc)}</TableCell>
-                      <TableCell className="tabular-nums">
+                      <TableCell className="text-base tabular-nums">{formatUtcTime(f.departureUtc)}</TableCell>
+                      <TableCell className="text-base tabular-nums">
                         {formatUtcTime(f.arrivalUtc)}
                         {formatUtcDate(f.arrivalUtc) !== formatUtcDate(f.departureUtc) && (
                           <sup className="ml-0.5 text-muted-foreground">+1</sup>
                         )}
                       </TableCell>
-                      <TableCell className="relative text-right tabular-nums">
+                      <TableCell className="relative text-right text-base tabular-nums">
                         {formatDuration(blockMinutes(f))}
                         {i === end - 1 && (
-                          <span className="absolute right-0 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-md border bg-background py-0.5 pr-0.5 pl-2 font-semibold shadow-sm">
+                          <span className="absolute right-0 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-md border bg-background py-0.5 pr-0.5 pl-2 text-sm font-semibold shadow-sm">
                             Σ {formatDuration(windowBlock)}
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -465,7 +465,7 @@ export default function App() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-base">
                         <TailCell
                           state={tails[key]}
                           override={overrides[key]}
