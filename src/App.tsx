@@ -65,7 +65,7 @@ export default function App() {
   const [overrides, setOverrides] = useState<Record<string, string>>(() => loadOverrides())
   const [lookup, setLookup] = useState<{ done: number; total: number }>()
   const [windowStart, setWindowStart] = useState<number>()
-  const [windowSize, setWindowSize] = useState(7)
+  const [windowSize, setWindowSize] = useState(8)
   const [previousPages, setPreviousPages] = useState(loadPrevious)
   const [pageEntries, setPageEntries] = useState<string[]>([])
   const tableRef = useRef<HTMLDivElement>(null)
@@ -398,8 +398,8 @@ export default function App() {
                 <TableHead>To</TableHead>
                 <TableHead>Dep (UTC)</TableHead>
                 <TableHead>Arr (UTC)</TableHead>
-                <TableHead className="text-right">Block</TableHead>
                 <TableHead>Tail</TableHead>
+                <TableHead className="text-right">Block</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="pr-4">Role</TableHead>
               </TableRow>
@@ -429,7 +429,9 @@ export default function App() {
                       }}
                     >
                       <TableCell className="pl-4 font-medium">{f.flightNumber}</TableCell>
-                      <TableCell className="text-base tabular-nums">{formatUtcDate(f.departureUtc)}</TableCell>
+                      <TableCell className="text-base tabular-nums">
+                        {formatUtcDate(f.departureUtc).slice(5).split("-").reverse().join("-")}
+                      </TableCell>
                       <TableCell className="text-base">
                         <Airport iata={f.from} />
                       </TableCell>
@@ -442,6 +444,14 @@ export default function App() {
                         {formatUtcDate(f.arrivalUtc) !== formatUtcDate(f.departureUtc) && (
                           <sup className="ml-0.5 text-muted-foreground">+1</sup>
                         )}
+                      </TableCell>
+                      <TableCell className="text-base">
+                        <TailCell
+                          state={tails[key]}
+                          override={overrides[key]}
+                          available={isLookupAvailable(f)}
+                          onOverride={(reg) => setOverride(f, reg)}
+                        />
                       </TableCell>
                       <TableCell className="relative text-right text-base tabular-nums">
                         {formatDuration(blockMinutes(f))}
@@ -464,14 +474,6 @@ export default function App() {
                             </Tooltip>
                           </span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-base">
-                        <TailCell
-                          state={tails[key]}
-                          override={overrides[key]}
-                          available={isLookupAvailable(f)}
-                          onOverride={(reg) => setOverride(f, reg)}
-                        />
                       </TableCell>
                       <TableCell className="text-muted-foreground">{f.aircraftType}</TableCell>
                       <TableCell className="relative pr-4">
@@ -549,11 +551,11 @@ export default function App() {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell colSpan={6} className="pl-4">
+                  <TableCell colSpan={7} className="pl-4">
                     {visible.length} flights
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{formatDuration(totalBlock)}</TableCell>
-                  <TableCell colSpan={3} />
+                  <TableCell colSpan={2} />
                 </TableRow>
               </TableFooter>
             )}
