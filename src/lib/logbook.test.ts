@@ -27,3 +27,11 @@ describe("addPage", () => {
     expect(addPage(["abc"], [flight(60)])).toBeUndefined()
   })
 })
+
+describe("addPage with landings typed into the page", () => {
+  it("adds them to the previous landings", () => {
+    const entries = ["", "", "", "", "3", "1"]
+    expect(addPage(["", "", "", "", "12"], [flight(60)], entries)?.slice(4, 6)).toEqual(["15", "1"])
+    expect(addPage([], [flight(60)], ["", "", "", "", "x"])).toBeUndefined()
+  })
+})

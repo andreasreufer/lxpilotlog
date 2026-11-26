@@ -2,21 +2,48 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Flight } from "@/lib/flights"
-import { add, format, KINDS, pageTotals, parse } from "@/lib/logbook"
+import { add, format, KINDS, LANDINGS, pageTotals, parse } from "@/lib/logbook"
 
 const SUBHEADS = ["SE", "ME", "Day", "Night", "Night", "IFR", "PIC", "Copi", "Dual", "Instructor"]
 
 export function LogbookTotals({
   page,
+  pageEntries,
+  onPageEntriesChange,
   previous,
   onPreviousChange,
 }: {
   page: Flight[]
+  /** Typed into this page's row: only the landings, which the roster doesn't have. */
+  pageEntries: string[]
+  onPageEntriesChange: (values: string[]) => void
   previous: string[]
   onPreviousChange: (values: string[]) => void
 }) {
   const previousValues = parse(previous)
-  const thisPage = pageTotals(page)
+  const pageValues = parse(pageEntries)
+  const thisPage = add(pageTotals(page), pageValues)
+
+  function entry(
+    row: string,
+    values: string[],
+    parsed: (number | undefined)[],
+    onChange: (v: string[]) => void,
+    i: number,
+  ) {
+    return (
+      <TableCell key={i} className="p-1">
+        <Input
+          aria-label={`${row}, column ${i + 1}`}
+          aria-invalid={parsed[i] === undefined}
+          placeholder={KINDS[i] === "time" ? "h:mm" : "0"}
+          value={values[i] ?? ""}
+          onChange={(e) => onChange(KINDS.map((_, j) => (j === i ? e.target.value : (values[j] ?? ""))))}
+          className="h-7 min-w-14 px-1.5 text-right tabular-nums"
+        />
+      </TableCell>
+    )
+  }
 
   const group = "border-l text-center"
   return (
@@ -53,30 +80,21 @@ export function LogbookTotals({
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow>
+          <TableRow className="hover:bg-transparent">
             <TableCell className="pl-4 font-medium">Total this page</TableCell>
-            {format(thisPage).map((v, i) => (
-              <TableCell key={i} className="text-right tabular-nums">
-                {v}
-              </TableCell>
-            ))}
+            {format(thisPage).map((v, i) =>
+              LANDINGS.includes(i) ? (
+                entry("Total this page", pageEntries, pageValues, onPageEntriesChange, i)
+              ) : (
+                <TableCell key={i} className="text-right tabular-nums">
+                  {v}
+                </TableCell>
+              ),
+            )}
           </TableRow>
           <TableRow className="hover:bg-transparent">
             <TableCell className="pl-4 font-medium">Total previous pages</TableCell>
-            {KINDS.map((k, i) => (
-              <TableCell key={i} className="p-1">
-                <Input
-                  aria-label={`Total previous pages, ${SUBHEADS[i] ?? ""} column ${i + 1}`}
-                  aria-invalid={previousValues[i] === undefined}
-                  placeholder={k === "time" ? "h:mm" : "0"}
-                  value={previous[i] ?? ""}
-                  onChange={(e) =>
-                    onPreviousChange(KINDS.map((_, j) => (j === i ? e.target.value : (previous[j] ?? ""))))
-                  }
-                  className="h-7 min-w-14 px-1.5 text-right tabular-nums"
-                />
-              </TableCell>
-            ))}
+            {KINDS.map((_, i) => entry("Total previous pages", previous, previousValues, onPreviousChange, i))}
           </TableRow>
           <TableRow>
             <TableCell className="pl-4 font-medium">Total Time</TableCell>

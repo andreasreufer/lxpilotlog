@@ -16,6 +16,7 @@ export const KINDS = [
   "time",
   "time",
 ] as const
+export const LANDINGS = [4, 5]
 const COOKIE = "carriedForward"
 
 /**
@@ -58,8 +59,13 @@ export function savePrevious(values: string[]) {
   writeCookie(COOKIE, JSON.stringify(values))
 }
 
-/** The previous pages plus this page; undefined if a previous-pages entry isn't valid. */
-export function addPage(previous: string[], page: Flight[]): string[] | undefined {
+/**
+ * The previous pages plus this page and what was typed into it (landings);
+ * undefined if an entry isn't valid.
+ */
+export function addPage(previous: string[], page: Flight[], pageEntries: string[] = []): string[] | undefined {
   const values = parse(previous)
-  return values.includes(undefined) ? undefined : format(add(pageTotals(page), values))
+  const entries = parse(pageEntries)
+  if (values.includes(undefined) || entries.includes(undefined)) return undefined
+  return format(add(add(pageTotals(page), entries), values))
 }

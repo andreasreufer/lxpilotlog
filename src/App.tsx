@@ -67,6 +67,7 @@ export default function App() {
   const [windowStart, setWindowStart] = useState<number>()
   const [windowSize, setWindowSize] = useState(7)
   const [previousPages, setPreviousPages] = useState(loadPrevious)
+  const [pageEntries, setPageEntries] = useState<string[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -128,12 +129,20 @@ export default function App() {
 
   /** Close the logbook page: its totals become part of the previous pages. */
   function addWindowToPreviousPages() {
-    const next = addPage(previousPages, visible.slice(start, end))
-    if (!next) return toast.error("Fix the highlighted total previous pages first")
-    const before = previousPages
+    const next = addPage(previousPages, visible.slice(start, end), pageEntries)
+    if (!next) return toast.error("Fix the highlighted totals first")
+    const before = { previousPages, pageEntries }
     updatePreviousPages(next)
+    // The typed landings belong to the page just added.
+    setPageEntries([])
     toast.success(`Added ${formatDuration(windowBlock)} to the total previous pages`, {
-      action: { label: "Undo", onClick: () => updatePreviousPages(before) },
+      action: {
+        label: "Undo",
+        onClick: () => {
+          updatePreviousPages(before.previousPages)
+          setPageEntries(before.pageEntries)
+        },
+      },
     })
   }
 
@@ -499,6 +508,8 @@ export default function App() {
       {flights.length > 0 && (
         <LogbookTotals
           page={start === undefined ? [] : visible.slice(start, end)}
+          pageEntries={pageEntries}
+          onPageEntriesChange={setPageEntries}
           previous={previousPages}
           onPreviousChange={updatePreviousPages}
         />
