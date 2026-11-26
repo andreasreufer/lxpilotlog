@@ -73,6 +73,12 @@ export function formatDuration(minutes: number): string {
   return `${h}:${String(m).padStart(2, "0")}`
 }
 
+/** "123:45" or "12" (hours) to minutes; undefined if it isn't a duration. */
+export function parseDuration(text: string): number | undefined {
+  const m = /^(\d+)(?::([0-5]\d))?$/.exec(text.trim())
+  return m ? Number(m[1]) * 60 + Number(m[2] ?? 0) : undefined
+}
+
 export function formatUtcTime(d: Date): string {
   return d.toISOString().slice(11, 16)
 }

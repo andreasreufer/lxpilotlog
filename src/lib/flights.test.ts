@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { blockMinutes, parseFlights } from "./flights"
+import { blockMinutes, parseDuration, parseFlights } from "./flights"
 
 const ics = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -58,9 +58,16 @@ describe("parseFlights", () => {
   })
 
   it("derives local departure date across midnight UTC", () => {
-    const [f] = parseFlights(
-      ics.replace("20261006T062700Z", "20261005T231000Z").replace("0827", "0110"),
-    )
+    const [f] = parseFlights(ics.replace("20261006T062700Z", "20261005T231000Z").replace("0827", "0110"))
     expect(f.departureLocalDate).toBe("2026-10-06")
+  })
+})
+
+describe("parseDuration", () => {
+  it("reads h:mm and whole hours", () => {
+    expect(parseDuration("1234:05")).toBe(1234 * 60 + 5)
+    expect(parseDuration(" 12 ")).toBe(720)
+    expect(parseDuration("1:75")).toBeUndefined()
+    expect(parseDuration("abc")).toBeUndefined()
   })
 })
