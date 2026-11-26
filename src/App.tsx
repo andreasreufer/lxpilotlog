@@ -372,7 +372,14 @@ export default function App() {
                         <sup className="ml-0.5 text-muted-foreground">+1</sup>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatDuration(blockMinutes(f))}</TableCell>
+                    <TableCell className="relative text-right tabular-nums">
+                      {formatDuration(blockMinutes(f))}
+                      {i === end - 1 && (
+                        <span className="absolute right-0 bottom-0 z-10 translate-y-1/2 rounded-md border bg-background px-2 py-0.5 font-semibold shadow-sm">
+                          Σ {formatDuration(windowBlock)}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <TailCell
                         state={tails[key]}
@@ -391,7 +398,7 @@ export default function App() {
           {visible.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={6} className="pl-4">
+                <TableCell colSpan={10} className="pl-4">
                   <div className="flex items-center gap-2">
                     Window of
                     <Input
@@ -442,10 +449,6 @@ export default function App() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {start !== undefined && formatDuration(windowBlock)}
-                </TableCell>
-                <TableCell colSpan={3} />
               </TableRow>
               <TableRow>
                 <TableCell colSpan={6} className="pl-4">
