@@ -219,65 +219,81 @@ export default function App() {
             <p className="text-sm text-muted-foreground">Flights from your crew schedule feed, times in UTC</p>
           </div>
         </div>
-        <SettingsDialog
-          apiKey={apiKey}
-          onSave={(key) => {
-            setApiKey(key)
-            writeSetting("aeroapiKey", key)
-          }}
-          onClearCache={() => {
-            clearCache()
-            setTails({})
-            toast.success("Tail sign cache cleared")
-          }}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".ics,text/calendar"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              if (file) ingest(await file.text())
-              e.target.value = ""
+        <div className="flex gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Refresh calendar feed"
+                disabled={loading || !feedUrl.trim()}
+                onClick={() => void loadFeed(feedUrl)}
+              >
+                <RefreshCwIcon className={cn(loading && "animate-spin")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh calendar feed{loadedAt && ` (loaded ${format(loadedAt, "HH:mm")})`}</TooltipContent>
+          </Tooltip>
+          <SettingsDialog
+            apiKey={apiKey}
+            onSave={(key) => {
+              setApiKey(key)
+              writeSetting("aeroapiKey", key)
             }}
-          />
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void loadFeed(feedUrl)
+            onClearCache={() => {
+              clearCache()
+              setTails({})
+              toast.success("Tail sign cache cleared")
             }}
           >
-            <Input
-              id="feed-url"
-              type="url"
-              placeholder="https://schedule.swiss.com/…/….ics"
-              value={feedUrl}
-              onChange={(e) => setFeedUrl(e.target.value)}
-              className="flex-1 font-mono text-xs"
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".ics,text/calendar"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (file) ingest(await file.text())
+                e.target.value = ""
+              }}
             />
-            <div className="flex gap-2">
-              <Button type="submit" disabled={loading || !feedUrl.trim()}>
-                {loading ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
-                Load feed
-              </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
-                    <UploadIcon />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Open an .ics file instead</TooltipContent>
-              </Tooltip>
-            </div>
-          </form>
-          {loadedAt && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {flights.length} flights in feed (excluding deadheads) · loaded {format(loadedAt, "HH:mm:ss")}
-            </p>
-          )}
-        </SettingsDialog>
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void loadFeed(feedUrl)
+              }}
+            >
+              <Input
+                id="feed-url"
+                type="url"
+                placeholder="https://schedule.swiss.com/…/….ics"
+                value={feedUrl}
+                onChange={(e) => setFeedUrl(e.target.value)}
+                className="flex-1 font-mono text-xs"
+              />
+              <div className="flex gap-2">
+                <Button type="submit" disabled={loading || !feedUrl.trim()}>
+                  {loading ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
+                  Load feed
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
+                      <UploadIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open an .ics file instead</TooltipContent>
+                </Tooltip>
+              </div>
+            </form>
+            {loadedAt && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {flights.length} flights in feed (excluding deadheads) · loaded {format(loadedAt, "HH:mm:ss")}
+              </p>
+            )}
+          </SettingsDialog>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
