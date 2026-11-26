@@ -9,6 +9,7 @@ import {
   DownloadIcon,
   Loader2Icon,
   PlaneIcon,
+  PlusIcon,
   RefreshCwIcon,
   SearchIcon,
   SquareIcon,
@@ -40,6 +41,7 @@ import {
   tailKey,
 } from "@/lib/tails"
 import { toIcao } from "@/lib/airports"
+import { addPage, loadPrevious, savePrevious } from "@/lib/logbook"
 import { PROXY } from "@/lib/proxy"
 import { readSetting, writeSetting } from "@/lib/storage"
 
@@ -64,6 +66,7 @@ export default function App() {
   const [lookup, setLookup] = useState<{ done: number; total: number }>()
   const [windowStart, setWindowStart] = useState<number>()
   const [windowSize, setWindowSize] = useState(7)
+  const [previousPages, setPreviousPages] = useState(loadPrevious)
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -117,6 +120,22 @@ export default function App() {
   const end = start === undefined ? 0 : Math.min(start + windowSize, visible.length)
   const inWindow = (i: number) => start !== undefined && i >= start && i < end
   const windowBlock = visible.filter((_, i) => inWindow(i)).reduce((sum, f) => sum + blockMinutes(f), 0)
+
+  function updatePreviousPages(values: string[]) {
+    setPreviousPages(values)
+    savePrevious(values)
+  }
+
+  /** Close the logbook page: its totals become part of the previous pages. */
+  function addWindowToPreviousPages() {
+    const next = addPage(previousPages, visible.slice(start, end))
+    if (!next) return toast.error("Fix the highlighted total previous pages first")
+    const before = previousPages
+    updatePreviousPages(next)
+    toast.success(`Added ${formatDuration(windowBlock)} to the total previous pages`, {
+      action: { label: "Undo", onClick: () => updatePreviousPages(before) },
+    })
+  }
 
   const tailFor = (f: Flight): string | undefined => {
     const key = tailKey(f)
@@ -376,8 +395,22 @@ export default function App() {
                     <TableCell className="relative text-right tabular-nums">
                       {formatDuration(blockMinutes(f))}
                       {i === end - 1 && (
-                        <span className="absolute right-0 bottom-0 z-10 translate-y-1/2 rounded-md border bg-background px-2 py-0.5 font-semibold shadow-sm">
+                        <span className="absolute right-0 bottom-0 z-10 flex translate-y-1/2 items-center gap-1 rounded-md border bg-background py-0.5 pr-0.5 pl-2 font-semibold shadow-sm">
                           Σ {formatDuration(windowBlock)}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-5"
+                                aria-label="Add this page to the total previous pages"
+                                onClick={addWindowToPreviousPages}
+                              >
+                                <PlusIcon />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Add this page to the total previous pages</TooltipContent>
+                          </Tooltip>
                         </span>
                       )}
                     </TableCell>
@@ -463,10 +496,11 @@ export default function App() {
         </Table>
       </Card>
 
-      {start !== undefined && (
+      {flights.length > 0 && (
         <LogbookTotals
-          page={visible.slice(start, end)}
-          previous={flights.filter((f) => f.departureUtc < visible[start].departureUtc)}
+          page={start === undefined ? [] : visible.slice(start, end)}
+          previous={previousPages}
+          onPreviousChange={updatePreviousPages}
         />
       )}
 
