@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { LogbookTotals } from "@/components/logbook-totals"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { TailCell, type TailState } from "@/components/tail-cell"
 import { blockMinutes, formatDuration, formatUtcDate, formatUtcTime, parseFlights, type Flight } from "@/lib/flights"
@@ -461,6 +462,13 @@ export default function App() {
           )}
         </Table>
       </Card>
+
+      {start !== undefined && (
+        <LogbookTotals
+          page={visible.slice(start, end)}
+          previous={flights.filter((f) => f.departureUtc < visible[start].departureUtc)}
+        />
+      )}
 
       <p className="text-xs text-muted-foreground">
         Version{" "}
