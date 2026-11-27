@@ -422,7 +422,13 @@ export default function App() {
                       data-window={
                         inWindow(i) ? `${i === start ? "first " : ""}${i === end - 1 ? "last" : ""}` : undefined
                       }
-                      className={cn("cursor-pointer", f.arrivalUtc.getTime() > Date.now() && "opacity-50")}
+                      className={cn(
+                        "cursor-pointer transition-[opacity,filter]",
+                        // Outside a selected window: faded and blurred, sharp again on hover so it can be picked.
+                        start !== undefined && !inWindow(i)
+                          ? "opacity-40 blur-[1.5px] hover:opacity-100 hover:blur-none"
+                          : f.arrivalUtc.getTime() > Date.now() && "opacity-50",
+                      )}
                       onClick={(e) => {
                         // Clicks on the tail sign editor shouldn't move the window.
                         if (!(e.target as HTMLElement).closest("button, input, a")) setWindowStart(i)
